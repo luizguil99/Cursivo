@@ -19,17 +19,10 @@ import { Progress } from "@/components/ui/progress";
 import { Brain, Clock, Trophy, ArrowRight, Check, X } from "lucide-react";
 import TopNav from "@/components/layouts/TopNav";
 import { ThemeToggle } from "@/components/theme-toggle";
-import {
-  collection,
-  getDocs,
-  query,
-  where,
-  orderBy,
-  writeBatch,
-} from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
 import { Input } from "@/components/ui/input";
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 
 const mockSimulations = [
   {
@@ -104,7 +97,8 @@ const mockSimulations = [
 ];
 
 function SimulationCard({ simulation, onStart }) {
-  const latestAttempt = simulation.history?.length > 0 ? simulation.history[0] : null;
+  const latestAttempt =
+    simulation.history?.length > 0 ? simulation.history[0] : null;
 
   return (
     <Card className="hover:shadow-lg transition-shadow duration-200 hover:border-[#F3C92C]/30">
@@ -158,325 +152,58 @@ function SimulationHistoryDialog({ isOpen, onClose, history }) {
   const [clearConfirmText, setClearConfirmText] = useState("");
   const { currentUser } = useAuth();
 
-  const handleClearHistory = async () => {
-    if (clearConfirmText.toLowerCase() !== "confirmar") {
-      return;
-    }
-
-    try {
-      const historyRef = collection(db, "simulationHistory");
-      const q = query(historyRef, where("userId", "==", currentUser.uid));
-      const querySnapshot = await getDocs(q);
-
-      const batch = writeBatch(db);
-      querySnapshot.docs.forEach((doc) => {
-        batch.delete(doc.ref);
-      });
-
-      await batch.commit();
-      onClose();
-      window.location.reload();
-    } catch (error) {
-      console.error("Erro ao limpar histórico:", error);
-    }
-  };
-
-  const calculatePercentage = (attempt) => {
-    if (!attempt || !attempt.correctAnswers || !attempt.totalQuestions)
-      return 0;
-    return Math.round((attempt.correctAnswers / attempt.totalQuestions) * 100);
-  };
-
-  if (selectedAttempt) {
-    return (
-      <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <div className="flex justify-between items-center">
-              <div>
-                <DialogTitle className="text-2xl font-bold">Detalhes do Simulado</DialogTitle>
-                <DialogDescription className="text-[#F3C92C]">
-                  {new Date(selectedAttempt.completedAt).toLocaleDateString()}
-                </DialogDescription>
-              </div>
-              <Button
-                variant="outline"
-                onClick={() => setSelectedAttempt(null)}
-                size="sm"
-                className="hover:bg-[#F3C92C]/10 hover:text-[#F3C92C] hover:border-[#F3C92C]/20"
-              >
-                Voltar
-              </Button>
-            </div>
-          </DialogHeader>
-
-          <div className="space-y-6 py-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="flex flex-col items-center justify-center p-6 border rounded-lg bg-card hover:border-[#F3C92C]/30 transition-colors">
-                <div className="text-4xl font-bold text-[#F3C92C]">
-                  {selectedAttempt.triScore}
-                </div>
-                <div className="text-sm text-muted-foreground mt-2">
-                  Nota TRI
-                </div>
-              </div>
-              <div className="flex flex-col items-center justify-center p-6 border rounded-lg bg-card">
-                <div className="text-4xl font-bold text-blue-500">
-                  {calculatePercentage(selectedAttempt)}%
-                </div>
-                <div className="text-sm text-muted-foreground mt-2">
-                  Porcentagem de Acerto
-                </div>
-              </div>
-              <div className="flex flex-col items-center justify-center p-6 border rounded-lg bg-card">
-                <div className="flex items-center gap-2">
-                  <span className="text-4xl font-bold text-green-500">
-                    {selectedAttempt.correctAnswers}
-                  </span>
-                  <span className="text-xl font-medium text-muted-foreground">
-                    /
-                  </span>
-                  <span className="text-4xl font-bold text-red-500">
-                    {selectedAttempt.totalQuestions -
-                      selectedAttempt.correctAnswers}
-                  </span>
-                </div>
-                <div className="text-sm text-muted-foreground mt-2">
-                  Acertos / Erros
-                </div>
-              </div>
-              <div className="flex flex-col items-center justify-center p-6 border rounded-lg bg-card">
-                <div className="text-4xl font-bold">
-                  {selectedAttempt.timeSpent}
-                </div>
-                <div className="text-sm text-muted-foreground mt-2">
-                  Minutos Gastos
-                </div>
-              </div>
-            </div>
-
-            {selectedAttempt.difficultyStats && (
-              <div className="border rounded-lg p-6">
-                <h3 className="font-medium text-lg mb-4">
-                  Desempenho por Nível de Dificuldade
-                </h3>
-                <div className="grid gap-4 md:grid-cols-3">
-                  {[
-                    { key: "EASY", label: "Fácil" },
-                    { key: "MEDIUM", label: "Médio" },
-                    { key: "HARD", label: "Difícil" }
-                  ].map(({ key, label }) => {
-                    const data = selectedAttempt.difficultyStats?.[key] || { correct: 0, total: 0 };
-                    const percentage = data.total > 0 ? Math.round((data.correct / data.total) * 100) : 0;
-                    
-                    return (
-                      <div key={key} className="p-4 border rounded-lg hover:border-[#F3C92C]/30 transition-colors">
-                        <div className="font-medium mb-2 text-[#F3C92C]">{label}</div>
-                        <div className="text-2xl font-bold">
-                          {percentage}%
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          {data.correct}/{data.total} questões
-                        </div>
-                        <Progress
-                          value={percentage}
-                          className="mt-2 bg-muted"
-                          indicatorClassName="bg-[#F3C92C]"
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Revisão das Questões */}
-            <div className="border rounded-lg p-6">
-              <h3 className="text-lg font-semibold mb-4">
-                Revisão das Questões
-              </h3>
-              <div className="space-y-6">
-                {mockSimulations[selectedAttempt.simulationId]?.questions.map(
-                  (question, index) => {
-                    const isCorrect =
-                      selectedAttempt.answers[index] === question.correctAnswer;
-                    const userAnswer = selectedAttempt.answers[index];
-
-                    return (
-                      <div key={index} className="p-4 border rounded-lg">
-                        <div className="flex items-start gap-3">
-                          <div
-                            className={`mt-1 flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center ${
-                              isCorrect ? "bg-green-500" : "bg-red-500"
-                            }`}
-                          >
-                            {isCorrect ? (
-                              <Check className="w-4 h-4 text-white" />
-                            ) : (
-                              <X className="w-4 h-4 text-white" />
-                            )}
-                          </div>
-                          <div className="flex-1">
-                            <h4 className="font-medium mt-4 p-4 border rounded-lg hover:border-[#F3C92C]/30 transition-colors">
-                              Questão {index + 1}
-                            </h4>
-                            <p className="text-muted-foreground mb-4">
-                              {question.question}
-                            </p>
-                            <div className="space-y-2">
-                              {question.options.map((option, optionIndex) => (
-                                <div
-                                  key={optionIndex}
-                                  className={`p-3 rounded-lg border ${
-                                    optionIndex === question.correctAnswer
-                                      ? "border-green-500 bg-green-500/10"
-                                      : optionIndex === userAnswer && !isCorrect
-                                      ? "border-red-500 bg-red-500/10"
-                                      : "border-input"
-                                  }`}
-                                >
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-medium">
-                                      {String.fromCharCode(97 + optionIndex)})
-                                    </span>
-                                    <span
-                                      className={`flex-1 ${
-                                        optionIndex === question.correctAnswer
-                                          ? "text-green-700 dark:text-green-300"
-                                          : optionIndex === userAnswer &&
-                                            !isCorrect
-                                          ? "text-red-700 dark:text-red-300"
-                                          : ""
-                                      }`}
-                                    >
-                                      {option}
-                                    </span>
-                                    {optionIndex === question.correctAnswer && (
-                                      <Check className="w-4 h-4 text-green-500" />
-                                    )}
-                                    {optionIndex === userAnswer &&
-                                      !isCorrect && (
-                                        <X className="w-4 h-4 text-red-500" />
-                                      )}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  }
-                )}
-              </div>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-    );
-  }
+  if (!isOpen) return null;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <div className="flex justify-between items-center">
-            <div>
-              <DialogTitle>Histórico de Simulados</DialogTitle>
-              <DialogDescription>
-                Veja seu progresso nos simulados realizados
-              </DialogDescription>
-            </div>
-            <Button
-              variant="destructive"
-              onClick={() => setShowClearConfirm(true)}
-            >
-              Limpar Histórico
-            </Button>
-          </div>
+          <DialogTitle>Histórico de Simulados</DialogTitle>
+          <DialogDescription>
+            Veja todos os seus simulados realizados
+          </DialogDescription>
         </DialogHeader>
 
-        {showClearConfirm ? (
-          <div className="space-y-4 py-4">
-            <div className="text-sm text-muted-foreground">
-              Digite "confirmar" para limpar todo o histórico de simulados:
-            </div>
-            <Input
-              type="text"
-              value={clearConfirmText}
-              onChange={(e) => setClearConfirmText(e.target.value)}
-              placeholder="confirmar"
-            />
-            <div className="flex justify-end space-x-4">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowClearConfirm(false);
-                  setClearConfirmText("");
-                }}
-              >
-                Cancelar
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={handleClearHistory}
-                disabled={clearConfirmText.toLowerCase() !== "confirmar"}
-              >
-                Confirmar
-              </Button>
-            </div>
+        <div className="space-y-4">
+          <div className="rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Simulado</TableHead>
+                  <TableHead>Data</TableHead>
+                  <TableHead>Nota TRI</TableHead>
+                  <TableHead>Nota Tradicional</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {history.map((attempt) => (
+                  <TableRow key={attempt.id}>
+                    <TableCell>{attempt.titulo_simulado}</TableCell>
+                    <TableCell>
+                      {new Date(attempt.finalizado_em).toLocaleDateString("pt-BR", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </TableCell>
+                    <TableCell>
+                      <span className="font-medium text-[#F3C92C]">
+                        {attempt.pontuacao_tri?.toFixed(1) || "-"}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="font-medium text-blue-500">
+                        {attempt.pontuacao}%
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </div>
-        ) : (
-          <div className="space-y-6 py-4">
-            {history.map((attempt, index) => (
-              <div
-                key={index}
-                className="border rounded-lg p-4 space-y-4 cursor-pointer hover:border-[#F3C92C]/30 transition-colors"
-                onClick={() => setSelectedAttempt(attempt)}
-              >
-                <div className="flex items-center justify-between">
-                  <h3 className="font-medium hover:text-[#F3C92C] transition-colors">{attempt.simulationTitle}</h3>
-                  <span className="text-sm text-[#F3C92C]">
-                    {new Date(attempt.completedAt).toLocaleDateString()}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="space-y-1">
-                    <span className="text-sm text-muted-foreground">
-                      Nota TRI
-                    </span>
-                    <div className="text-2xl font-bold">
-                      {attempt.triScore || "-"}
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <span className="text-sm text-muted-foreground">
-                      Porcentagem de Acerto
-                    </span>
-                    <div className="text-2xl font-bold">
-                      {calculatePercentage(attempt)}%
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <span className="text-sm text-muted-foreground">
-                      Acertos
-                    </span>
-                    <div className="text-2xl font-bold">
-                      {attempt.correctAnswers}/{attempt.totalQuestions}
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <span className="text-sm text-muted-foreground">Tempo</span>
-                    <div className="text-2xl font-bold">
-                      {attempt.timeSpent}min
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        </div>
       </DialogContent>
     </Dialog>
   );
@@ -486,43 +213,32 @@ function Simulations() {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
   const [simulations] = useState(mockSimulations);
-  const [simulationHistory, setSimulationHistory] = useState([]);
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [history, setHistory] = useState([]);
+  const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function loadSimulationHistory() {
+    const fetchHistory = async () => {
       if (!currentUser) return;
 
-      setLoading(true);
-      console.log("Carregando histórico para usuário:", currentUser.uid); // Debug log
-
       try {
-        const historyRef = collection(db, "simulationHistory");
-        const q = query(historyRef, where("userId", "==", currentUser.uid));
+        const { data, error } = await supabase
+          .from("historico_simulados")
+          .select("*")
+          .eq("usuario_id", currentUser.id)
+          .order("finalizado_em", { ascending: false });
 
-        const querySnapshot = await getDocs(q);
-        console.log("Documentos encontrados:", querySnapshot.size); // Debug log
+        if (error) throw error;
 
-        const history = querySnapshot.docs.map((doc) => {
-          const data = doc.data();
-          console.log("Documento:", data); // Debug log
-          return {
-            id: doc.id,
-            ...data,
-          };
-        });
-
-        console.log("Histórico carregado:", history); // Debug log
-        setSimulationHistory(history);
+        setHistory(data || []);
       } catch (error) {
-        console.error("Erro ao carregar histórico:", error);
+        console.error("Erro ao buscar histórico:", error);
       } finally {
         setLoading(false);
       }
-    }
+    };
 
-    loadSimulationHistory();
+    fetchHistory();
   }, [currentUser]);
 
   const handleStartSimulation = (simulationId) => {
@@ -530,27 +246,27 @@ function Simulations() {
   };
 
   const getSimulationHistory = (simulationId) => {
-    return simulationHistory.filter((h) => h.simulationId === simulationId);
+    return history.filter((h) => h.simuladoId === simulationId);
   };
 
   const calculateOverallProgress = () => {
-    if (simulationHistory.length === 0) return 0;
+    if (history.length === 0) return 0;
 
     // Calcula a média das notas TRI
-    const totalScore = simulationHistory.reduce((acc, curr) => {
-      // Usa triScore se disponível, senão usa score tradicional
-      const score = curr.triScore || curr.score;
+    const totalScore = history.reduce((acc, curr) => {
+      // Usa pontuacao_tri se disponível, senão usa pontuacao tradicional
+      const score = curr.pontuacao_tri || curr.pontuacao || 0;
       return acc + score;
     }, 0);
 
-    const average = Math.round(totalScore / simulationHistory.length);
+    const average = Math.round(totalScore / history.length);
 
     // Se tiver notas TRI, retorna direto (já está na escala 0-1000)
-    if (simulationHistory.some((h) => h.triScore)) {
+    if (history.some((h) => h.pontuacao_tri)) {
       return average;
     }
 
-    // Se forem todas notas tradicionais, converte para escala TRI (0-1000)
+    // Se não tiver TRI, converte a média tradicional (0-100) para escala TRI (0-1000)
     return Math.round((average / 100) * 1000);
   };
 
@@ -593,9 +309,7 @@ function Simulations() {
               <CardContent>
                 <div className="flex items-center space-x-2">
                   <Trophy className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-2xl font-bold">
-                    {simulationHistory.length}
-                  </span>
+                  <span className="text-2xl font-bold">{history.length}</span>
                 </div>
               </CardContent>
             </Card>
@@ -608,7 +322,7 @@ function Simulations() {
                 <Button
                   variant="secondary"
                   className="w-full"
-                  onClick={() => setIsHistoryOpen(true)}
+                  onClick={() => setIsHistoryDialogOpen(true)}
                 >
                   Ver Histórico Completo
                 </Button>
@@ -631,9 +345,9 @@ function Simulations() {
       </div>
 
       <SimulationHistoryDialog
-        isOpen={isHistoryOpen}
-        onClose={() => setIsHistoryOpen(false)}
-        history={simulationHistory}
+        isOpen={isHistoryDialogOpen}
+        onClose={() => setIsHistoryDialogOpen(false)}
+        history={history}
       />
     </div>
   );

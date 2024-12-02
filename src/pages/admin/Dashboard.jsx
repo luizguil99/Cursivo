@@ -8,13 +8,7 @@ import {
   Folders,
   ListChecks,
 } from "lucide-react";
-import {
-  collection,
-  getDocs,
-  query,
-  where,
-} from "firebase/firestore";
-import { db } from "../../lib/firebase";
+import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../contexts/AuthContext";
 
 export default function AdminDashboard() {
@@ -33,53 +27,48 @@ export default function AdminDashboard() {
       try {
         setLoading(true);
 
-        // Buscar cursos
-        const coursesSnapshot = await getDocs(collection(db, "courses"));
-        const coursesData = coursesSnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
+        // Buscar total de cursos
+        const { count: totalCourses, error: coursesError } = await supabase
+          .from("cursos")
+          .select("*", { count: "exact", head: true });
 
-        // Buscar módulos para cada curso
-        const modulesData = {};
-        for (const course of coursesData) {
-          const moduleSnapshot = await getDocs(
-            query(collection(db, "modules"), where("courseId", "==", course.id))
-          );
-          modulesData[course.id] = moduleSnapshot.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-          }));
-        }
+        if (coursesError) throw coursesError;
 
-        // Buscar vídeos para cada módulo
-        const videosData = {};
-        for (const course of coursesData) {
-          const courseModules = modulesData[course.id] || [];
-          for (const module of courseModules) {
-            const videoSnapshot = await getDocs(
-              query(
-                collection(db, "videos"),
-                where("moduleId", "==", module.id)
-              )
-            );
-            videosData[module.id] = videoSnapshot.docs.map((doc) => ({
-              id: doc.id,
-              ...doc.data(),
-            }));
-          }
-        }
+        // Buscar total de módulos
+        const { count: totalModules, error: modulesError } = await supabase
+          .from("modulos")
+          .select("*", { count: "exact", head: true });
 
-        // Atualizar estatísticas
-        const studentsSnapshot = await getDocs(collection(db, "users"));
-        const questionsSnapshot = await getDocs(collection(db, "questions"));
+        if (modulesError) throw modulesError;
+
+        // Buscar total de vídeos
+        const { count: totalVideos, error: videosError } = await supabase
+          .from("videoaulas")
+          .select("*", { count: "exact", head: true });
+
+        if (videosError) throw videosError;
+
+        // Buscar total de estudantes (usuários com papel 'student')
+        const { count: totalStudents, error: studentsError } = await supabase
+          .from("perfis")
+          .select("*", { count: "exact", head: true })
+          .eq("papel", "student");
+
+        if (studentsError) throw studentsError;
+
+        // Buscar total de questões
+        const { count: totalQuestions, error: questionsError } = await supabase
+          .from("questoes")
+          .select("*", { count: "exact", head: true });
+
+        if (questionsError) throw questionsError;
 
         setStats({
-          totalCourses: coursesData.length,
-          totalModules: Object.values(modulesData).flat().length,
-          totalVideos: Object.values(videosData).flat().length,
-          totalStudents: studentsSnapshot.docs.length,
-          totalQuestions: questionsSnapshot.docs.length,
+          totalCourses,
+          totalModules,
+          totalVideos,
+          totalStudents,
+          totalQuestions,
         });
       } catch (error) {
         console.error("Erro ao carregar dados:", error);
@@ -139,11 +128,7 @@ export default function AdminDashboard() {
           value={stats.totalQuestions}
           icon={ListChecks}
         />
-        <StatCard
-          title="Estudantes"
-          value={stats.totalStudents}
-          icon={Users}
-        />
+        <StatCard title="Estudantes" value={stats.totalStudents} icon={Users} />
       </div>
     </div>
   );

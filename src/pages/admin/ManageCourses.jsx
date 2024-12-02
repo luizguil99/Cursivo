@@ -25,19 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  collection,
-  getDocs,
-  addDoc,
-  deleteDoc,
-  doc,
-  query,
-  where,
-  writeBatch,
-  updateDoc,
-  serverTimestamp,
-} from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   PlusCircle,
@@ -138,20 +126,15 @@ export default function ManageCourses() {
       if (!newQuestion.subject) return;
 
       try {
-        const questionsRef = collection(db, "questions");
-        const q = query(
-          questionsRef,
-          where("subject", "==", newQuestion.subject)
-        );
-        const querySnapshot = await getDocs(q);
+        const { data: topics, error } = await supabase
+          .from("questoes")
+          .select("topico")
+          .eq("materia", newQuestion.subject);
 
-        const topics = new Set();
-        querySnapshot.docs.forEach((doc) => {
-          const topic = doc.data().topic;
-          if (topic) topics.add(topic);
-        });
+        if (error) throw error;
 
-        setExistingTopics(Array.from(topics));
+        const uniqueTopics = [...new Set(topics.map((q) => q.topico))];
+        setExistingTopics(uniqueTopics);
       } catch (error) {
         console.error("Erro ao buscar tópicos:", error);
       }
@@ -163,43 +146,47 @@ export default function ManageCourses() {
   const fetchCourses = async () => {
     try {
       // Buscar cursos
-      const coursesRef = collection(db, "courses");
-      const coursesSnapshot = await getDocs(coursesRef);
-      const coursesData = coursesSnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
+      const { data: coursesData, error: coursesError } = await supabase
+        .from("cursos")
+        .select("*")
+        .order("criado_em", { ascending: false });
+
+      if (coursesError) throw coursesError;
       setCourses(coursesData);
 
       // Buscar módulos para cada curso
-      const modulesData = {};
-      for (const course of coursesData) {
-        const moduleQuery = query(
-          collection(db, "modules"),
-          where("courseId", "==", course.id)
-        );
-        const moduleSnapshot = await getDocs(moduleQuery);
-        modulesData[course.id] = moduleSnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-      }
-      setModules(modulesData);
+      const { data: modulesData, error: modulesError } = await supabase
+        .from("modulos")
+        .select("*")
+        .order("ordem_indice", { ascending: true });
+
+      if (modulesError) throw modulesError;
+
+      const modulesGrouped = {};
+      modulesData.forEach((module) => {
+        if (!modulesGrouped[module.curso_id]) {
+          modulesGrouped[module.curso_id] = [];
+        }
+        modulesGrouped[module.curso_id].push(module);
+      });
+      setModules(modulesGrouped);
 
       // Buscar vídeos para cada módulo
-      const videosData = {};
-      for (const course of coursesData) {
-        const videoQuery = query(
-          collection(db, "videos"),
-          where("courseId", "==", course.id)
-        );
-        const videoSnapshot = await getDocs(videoQuery);
-        videosData[course.id] = videoSnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-      }
-      setVideos(videosData);
+      const { data: videosData, error: videosError } = await supabase
+        .from("videoaulas")
+        .select("*")
+        .order("ordem", { ascending: true });
+
+      if (videosError) throw videosError;
+
+      const videosGrouped = {};
+      videosData.forEach((video) => {
+        if (!videosGrouped[video.curso_id]) {
+          videosGrouped[video.curso_id] = [];
+        }
+        videosGrouped[video.curso_id].push(video);
+      });
+      setVideos(videosGrouped);
     } catch (error) {
       console.error("Erro ao buscar dados:", error);
     }
@@ -208,41 +195,70 @@ export default function ManageCourses() {
   const handleAddCourse = async (e) => {
     e.preventDefault();
     try {
-      await addDoc(collection(db, "courses"), {
-        ...newCourse,
-        createdAt: new Date().toISOString(),
-      });
+      const { data, error } = await supabase
+        .from("cursos")
+        .insert([
+          {
+            titulo: newCourse.title,
+            descricao: newCourse.description,
+            criado_em: new Date().toISOString(),
+          },
+        ])
+        .select();
+
+      if (error) throw error;
+
       setIsAddCourseDialogOpen(false);
       setNewCourse({ title: "", description: "" });
       fetchCourses();
     } catch (error) {
       console.error("Erro ao adicionar curso:", error);
-      alert("Erro ao adicionar curso: " + error.message);
+      toast({
+        title: "Erro ao adicionar curso",
+        description: error.message,
+        variant: "destructive",
+      });
     }
   };
 
   const handleAddModule = async (e) => {
     e.preventDefault();
     if (!selectedCourse) {
-      alert("Por favor, selecione um curso primeiro.");
+      toast({
+        title: "Erro",
+        description: "Por favor, selecione um curso primeiro.",
+        variant: "destructive",
+      });
       return;
     }
 
     try {
       setLoading(true);
-      await addDoc(collection(db, "modules"), {
-        ...newModule,
-        courseId: selectedCourse,
-        createdAt: new Date().toISOString(),
-        createdBy: currentUser.email,
-        order: modules[selectedCourse]?.length || 0,
-      });
+      const { data, error } = await supabase
+        .from("modulos")
+        .insert([
+          {
+            titulo: newModule.title,
+            descricao: newModule.description,
+            curso_id: selectedCourse,
+            criado_em: new Date().toISOString(),
+            ordem_indice: modules[selectedCourse]?.length || 0,
+          },
+        ])
+        .select();
+
+      if (error) throw error;
+
       setIsAddModuleDialogOpen(false);
       setNewModule({ title: "", description: "" });
       fetchCourses();
     } catch (error) {
       console.error("Erro ao adicionar módulo:", error);
-      alert("Erro ao adicionar módulo: " + error.message);
+      toast({
+        title: "Erro ao adicionar módulo",
+        description: error.message,
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -251,35 +267,62 @@ export default function ManageCourses() {
   const handleAddVideo = async (e) => {
     e.preventDefault();
     try {
-      // Filtrar recursos vazios
       const validResources = resources.filter((r) => r.name && r.url);
 
-      await addDoc(collection(db, "videos"), {
-        ...newVideo,
-        courseId: selectedCourse,
-        moduleId: selectedModule,
-        resources: validResources, // Adicionar recursos ao documento
-        createdAt: new Date().toISOString(),
-      });
+      const { data, error } = await supabase
+        .from("videoaulas")
+        .insert([
+          {
+            titulo: newVideo.title,
+            descricao: newVideo.description,
+            url_video: newVideo.videoUrl,
+            curso_id: selectedCourse,
+            modulo_id: selectedModule,
+            recursos: validResources,
+            criado_em: new Date().toISOString(),
+          },
+        ])
+        .select();
+
+      if (error) throw error;
+
       setIsAddVideoDialogOpen(false);
       setNewVideo({ title: "", description: "", videoUrl: "" });
-      setResources([{ name: "", url: "" }]); // Resetar recursos
+      setResources([{ name: "", url: "" }]);
       fetchCourses();
     } catch (error) {
       console.error("Erro ao adicionar vídeo:", error);
-      alert("Erro ao adicionar vídeo: " + error.message);
+      toast({
+        title: "Erro ao adicionar vídeo",
+        description: error.message,
+        variant: "destructive",
+      });
     }
   };
 
   const handleAddQuestion = async (e) => {
     e.preventDefault();
     try {
-      setLoading(true);
-      await addDoc(collection(db, "questions"), {
-        ...newQuestion,
-        courseId: selectedCourse,
-        createdAt: new Date().toISOString(),
-      });
+      const { data, error } = await supabase
+        .from("questoes")
+        .insert([
+          {
+            topico: newQuestion.topic,
+            questao: newQuestion.question,
+            url_imagem: newQuestion.image,
+            opcoes: newQuestion.options,
+            resposta_correta: newQuestion.correctAnswer,
+            video_solucao: newQuestion.solutionVideo,
+            assunto: newQuestion.subject,
+            banca_examinadora: newQuestion.examBoard,
+            criado_por: currentUser.id,
+            criado_em: new Date().toISOString(),
+          },
+        ])
+        .select();
+
+      if (error) throw error;
+
       setIsAddQuestionDialogOpen(false);
       setNewQuestion({
         topic: "",
@@ -289,13 +332,20 @@ export default function ManageCourses() {
         correctAnswer: 0,
         solutionVideo: "",
         subject: "",
-        examBoard: "", // Nova propriedade para a banca
+        examBoard: "",
+      });
+
+      toast({
+        title: "Sucesso!",
+        description: "Questão adicionada com sucesso.",
       });
     } catch (error) {
       console.error("Erro ao adicionar questão:", error);
-      alert("Erro ao adicionar questão: " + error.message);
-    } finally {
-      setLoading(false);
+      toast({
+        variant: "destructive",
+        title: "Erro!",
+        description: "Erro ao adicionar questão: " + error.message,
+      });
     }
   };
 
@@ -309,18 +359,24 @@ export default function ManageCourses() {
   const confirmDeleteCourse = async () => {
     if (!courseToDelete) return;
 
-    const confirmationWord = courseToDelete.title.toUpperCase();
+    const confirmationWord = courseToDelete.titulo.toUpperCase();
     if (deleteConfirmation !== confirmationWord) {
       toast({
         title: "Confirmação inválida",
-        description: `Digite "${courseToDelete.title.toUpperCase()}" para confirmar a exclusão.`,
+        description: `Digite "${courseToDelete.titulo.toUpperCase()}" para confirmar a exclusão.`,
         variant: "destructive",
       });
       return;
     }
 
     try {
-      await deleteDoc(doc(db, "courses", courseToDelete.id));
+      const { error } = await supabase
+        .from("cursos")
+        .delete()
+        .eq("id", courseToDelete.id);
+
+      if (error) throw error;
+
       toast({
         title: "Curso excluído",
         description: "O curso foi excluído com sucesso.",
@@ -333,7 +389,7 @@ export default function ManageCourses() {
       console.error("Erro ao excluir curso:", error);
       toast({
         title: "Erro ao excluir curso",
-        description: "Tente novamente mais tarde.",
+        description: error.message,
         variant: "destructive",
       });
     }
@@ -342,11 +398,21 @@ export default function ManageCourses() {
   const handleDeleteModule = async (moduleId) => {
     if (window.confirm("Tem certeza que deseja excluir este módulo?")) {
       try {
-        await deleteDoc(doc(db, "modules", moduleId));
+        const { error } = await supabase
+          .from("modulos")
+          .delete()
+          .eq("id", moduleId);
+
+        if (error) throw error;
+
         fetchCourses();
       } catch (error) {
         console.error("Erro ao excluir módulo:", error);
-        alert("Erro ao excluir módulo: " + error.message);
+        toast({
+          title: "Erro ao excluir módulo",
+          description: error.message,
+          variant: "destructive",
+        });
       }
     }
   };
@@ -354,11 +420,21 @@ export default function ManageCourses() {
   const handleDeleteVideo = async (videoId) => {
     if (window.confirm("Tem certeza que deseja excluir este vídeo?")) {
       try {
-        await deleteDoc(doc(db, "videos", videoId));
+        const { error } = await supabase
+          .from("videoaulas")
+          .delete()
+          .eq("id", videoId);
+
+        if (error) throw error;
+
         fetchCourses();
       } catch (error) {
         console.error("Erro ao excluir vídeo:", error);
-        alert("Erro ao excluir vídeo: " + error.message);
+        toast({
+          title: "Erro ao excluir vídeo",
+          description: error.message,
+          variant: "destructive",
+        });
       }
     }
   };
@@ -367,6 +443,7 @@ export default function ManageCourses() {
     e.preventDefault();
 
     if (!editingVideo?.id) {
+      console.error('No video ID found for editing', editingVideo);
       toast({
         title: "Erro ao atualizar aula",
         description: "Dados da aula inválidos",
@@ -375,27 +452,30 @@ export default function ManageCourses() {
       return;
     }
 
+    console.log('Editing video:', editingVideo); // Debug log
+
     setLoading(true);
     try {
       const validResources =
-        editingVideo.resources?.filter((r) => r.name && r.url) || [];
+        editingVideo.recursos?.filter((r) => r.name && r.url) || [];
 
-      // Atualizar o documento na coleção videos
-      const videoRef = doc(db, "videos", editingVideo.id);
+      console.log('Valid resources:', validResources); // Debug log
 
-      const updateData = {
-        title: editingVideo.title || "",
-        description: editingVideo.description || "",
-        resources: validResources,
-        updatedAt: serverTimestamp(),
-      };
+      const { data, error } = await supabase
+        .from("videoaulas")
+        .update({
+          titulo: editingVideo.titulo || "",
+          descricao: editingVideo.descricao || "",
+          recursos: validResources,
+          atualizado_em: new Date().toISOString(),
+          url_video: editingVideo.url_video || "",
+        })
+        .eq("id", editingVideo.id)
+        .select();
 
-      // Só atualiza a URL se ela foi modificada
-      if (editingVideo.url !== undefined) {
-        updateData.videoUrl = editingVideo.url;
-      }
+      console.log('Supabase update result:', { data, error }); // Debug log
 
-      await updateDoc(videoRef, updateData);
+      if (error) throw error;
 
       // Atualizar o estado local
       setVideos((prev) => {
@@ -414,10 +494,10 @@ export default function ManageCourses() {
             video.id === editingVideo.id
               ? {
                   ...video,
-                  title: editingVideo.title || "",
-                  description: editingVideo.description || "",
-                  videoUrl: editingVideo.url, // Usar videoUrl aqui também
-                  resources: validResources,
+                  titulo: editingVideo.titulo || "",
+                  descricao: editingVideo.descricao || "",
+                  url_video: editingVideo.url_video || "",
+                  recursos: validResources,
                 }
               : video
           ),
@@ -432,11 +512,10 @@ export default function ManageCourses() {
       setIsEditVideoDialogOpen(false);
       setEditingVideo(null);
     } catch (error) {
-      console.error("Erro ao atualizar aula:", error);
+      console.error("Erro detalhado ao atualizar aula:", error);
       toast({
         title: "Erro ao atualizar aula",
-        description:
-          error.message || "Verifique se você tem permissão de administrador.",
+        description: error.message,
         variant: "destructive",
       });
     } finally {
@@ -447,21 +526,21 @@ export default function ManageCourses() {
   const handleAddResource = () => {
     setEditingVideo((prev) => ({
       ...prev,
-      resources: [...(prev.resources || []), { name: "", url: "" }],
+      recursos: [...(prev.recursos || []), { name: "", url: "" }],
     }));
   };
 
   const handleRemoveResource = (index) => {
     setEditingVideo((prev) => ({
       ...prev,
-      resources: prev.resources.filter((_, i) => i !== index),
+      recursos: prev.recursos.filter((_, i) => i !== index),
     }));
   };
 
   const handleResourceChange = (index, field, value) => {
     setEditingVideo((prev) => ({
       ...prev,
-      resources: prev.resources.map((resource, i) =>
+      recursos: prev.recursos.map((resource, i) =>
         i === index ? { ...resource, [field]: value } : resource
       ),
     }));
@@ -485,11 +564,91 @@ export default function ManageCourses() {
     setActiveId(event.active.id);
   };
 
+  const handleVideoReorder = async (courseId, moduleId, oldIndex, newIndex) => {
+    const reorderedVideos = arrayMove(videos[moduleId], oldIndex, newIndex);
+    setVideos((prev) => ({
+      ...prev,
+      [moduleId]: reorderedVideos,
+    }));
+
+    try {
+      // Atualizar a ordem no banco de dados
+      for (let i = 0; i < reorderedVideos.length; i++) {
+        const video = reorderedVideos[i];
+        const { error } = await supabase
+          .from("videoaulas")
+          .update({ ordem: i })
+          .eq("id", video.id);
+
+        if (error) throw error;
+      }
+
+      toast({
+        title: "Vídeos reordenados",
+        description: "A ordem dos vídeos foi atualizada com sucesso.",
+      });
+    } catch (error) {
+      console.error("Erro ao reordenar vídeos:", error);
+      toast({
+        title: "Erro ao reordenar vídeos",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleModuleReorder = async (courseId, oldIndex, newIndex) => {
+    const reorderedModules = arrayMove(modules[courseId], oldIndex, newIndex);
+    setModules((prev) => ({
+      ...prev,
+      [courseId]: reorderedModules,
+    }));
+
+    try {
+      // Atualizar a ordem no banco de dados
+      for (let i = 0; i < reorderedModules.length; i++) {
+        const module = reorderedModules[i];
+        const { error } = await supabase
+          .from("modulos")
+          .update({ ordem_indice: i })
+          .eq("id", module.id);
+
+        if (error) throw error;
+      }
+
+      toast({
+        title: "Módulos reordenados",
+        description: "A ordem dos módulos foi atualizada com sucesso.",
+      });
+    } catch (error) {
+      console.error("Erro ao reordenar módulos:", error);
+      toast({
+        title: "Erro ao reordenar módulos",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleDragEnd = async (event) => {
     const { active, over } = event;
 
     if (active.id !== over?.id) {
-      // Se for um módulo
+      if (active.id.startsWith("video-") && over?.id.startsWith("video-")) {
+        const moduleId = Object.keys(videos).find((moduleId) =>
+          videos[moduleId].find((v) => v.id === active.id.replace("video-", ""))
+        );
+
+        const oldIndex = videos[moduleId].findIndex(
+          (v) => v.id === active.id.replace("video-", "")
+        );
+        const newIndex = videos[moduleId].findIndex(
+          (v) => v.id === over.id.replace("video-", "")
+        );
+
+        await handleVideoReorder(null, moduleId, oldIndex, newIndex);
+      }
+
       if (active.id.startsWith("module-") && over?.id.startsWith("module-")) {
         const courseId = Object.keys(modules).find((courseId) =>
           modules[courseId].find(
@@ -504,83 +663,7 @@ export default function ManageCourses() {
           (m) => m.id === over.id.replace("module-", "")
         );
 
-        const newModules = arrayMove(modules[courseId], oldIndex, newIndex);
-
-        try {
-          const batch = writeBatch(db);
-          newModules.forEach((module, index) => {
-            const moduleRef = doc(db, "modules", module.id);
-            batch.update(moduleRef, { order: index });
-          });
-          await batch.commit();
-
-          setModules((prev) => ({
-            ...prev,
-            [courseId]: newModules,
-          }));
-
-          toast({
-            title: "Módulos reordenados",
-            description: "A ordem dos módulos foi atualizada com sucesso.",
-          });
-        } catch (error) {
-          console.error("Erro ao reordenar módulos:", error);
-          toast({
-            title: "Erro ao reordenar módulos",
-            description: "Tente novamente mais tarde.",
-            variant: "destructive",
-          });
-        }
-      }
-      // Se for um vídeo
-      else if (
-        active.id.startsWith("video-") &&
-        over?.id.startsWith("video-")
-      ) {
-        const currentModule = Object.entries(videos).find(
-          ([moduleId, moduleVideos]) =>
-            moduleVideos.some((v) => `video-${v.id}` === active.id)
-        );
-
-        if (currentModule) {
-          const moduleId = currentModule[0];
-          const oldIndex = videos[moduleId].findIndex(
-            (v) => `video-${v.id}` === active.id
-          );
-          const newIndex = videos[moduleId].findIndex(
-            (v) => `video-${v.id}` === over.id
-          );
-
-          if (oldIndex !== -1 && newIndex !== -1) {
-            const newVideos = arrayMove(videos[moduleId], oldIndex, newIndex);
-
-            try {
-              const batch = writeBatch(db);
-              newVideos.forEach((video, index) => {
-                const videoRef = doc(db, "videos", video.id);
-                batch.update(videoRef, { order: index });
-              });
-              await batch.commit();
-
-              setVideos((prev) => ({
-                ...prev,
-                [moduleId]: newVideos,
-              }));
-
-              toast({
-                title: "Aulas reordenadas",
-                description: "A ordem das aulas foi atualizada com sucesso.",
-              });
-            } catch (error) {
-              console.error("Erro ao reordenar aulas:", error);
-              toast({
-                title: "Erro ao reordenar aulas",
-                description: "Tente novamente mais tarde.",
-                variant: "destructive",
-              });
-            }
-          }
-        }
+        await handleModuleReorder(courseId, oldIndex, newIndex);
       }
     }
   };
@@ -589,7 +672,7 @@ export default function ManageCourses() {
     const course = courses.find((c) => c.id === courseId);
     setSelectedCourse(courseId);
     setSelectedModule(moduleId);
-    setSelectedSubject(course?.title || "");
+    setSelectedSubject(course?.titulo || "");
     setIsNewModule(false);
     setNewVideo({
       title: "",
@@ -653,9 +736,9 @@ export default function ManageCourses() {
             >
               <ChevronRight className="h-4 w-4" />
             </div>
-            <span className="font-medium">{module.title}</span>
+            <span className="font-medium">{module.titulo}</span>
             <span className="text-sm text-muted-foreground">
-              ({videos?.filter((v) => v.moduleId === module.id).length || 0}{" "}
+              ({videos?.filter((v) => v.modulo_id === module.id).length || 0}{" "}
               aulas)
             </span>
           </div>
@@ -689,7 +772,7 @@ export default function ManageCourses() {
         {isExpanded ? (
           <div className="p-2 bg-background border border-[#FFD700]/10 border-t-0 rounded-b-md transition-all duration-500 ease-in-out transform-gpu opacity-100">
             <div className="animate-fadeIn">
-              {videos?.filter((v) => v.moduleId === module.id).length > 0 ? (
+              {videos?.filter((v) => v.modulo_id === module.id).length > 0 ? (
                 <DndContext
                   sensors={sensors}
                   collisionDetection={closestCenter}
@@ -697,13 +780,13 @@ export default function ManageCourses() {
                 >
                   <SortableContext
                     items={videos
-                      ?.filter((v) => v.moduleId === module.id)
+                      ?.filter((v) => v.modulo_id === module.id)
                       .map((v) => `video-${v.id}`)}
                     strategy={verticalListSortingStrategy}
                   >
                     <div className="space-y-2">
                       {videos
-                        ?.filter((v) => v.moduleId === module.id)
+                        ?.filter((v) => v.modulo_id === module.id)
                         .map((video) => (
                           <SortableVideo
                             key={`video-${video.id}`}
@@ -755,7 +838,7 @@ export default function ManageCourses() {
             <GripVertical className="h-4 w-4 text-muted-foreground" />
           </div>
           <VideoIcon className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm">{video.title}</span>
+          <span className="text-sm">{video.titulo}</span>
         </div>
         <div className="flex items-center space-x-2">
           <Button
@@ -790,7 +873,7 @@ export default function ManageCourses() {
       options: ["", "", "", "", ""],
       correctAnswer: 0,
       solutionVideo: "",
-      subject: selectedCourseData?.title || "",
+      subject: selectedCourseData?.titulo || "",
       examBoard: "", // Nova propriedade para a banca
     });
     setSelectedCourse(selectedCourse);
@@ -844,12 +927,12 @@ export default function ManageCourses() {
                     >
                       <ChevronRight className="h-4 w-4" />
                     </div>
-                    <h3 className="text-lg font-semibold">{course.title}</h3>
+                    <h3 className="text-lg font-semibold">{course.titulo}</h3>
                   </div>
                 </div>
                 <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
                   <span>
-                    Criado em {new Date(course.createdAt).toLocaleDateString()}
+                    Criado em {new Date(course.criado_em).toLocaleDateString()}
                   </span>
                   <span>•</span>
                   <span>{modules[course.id]?.length || 0} módulos</span>
@@ -885,7 +968,7 @@ export default function ManageCourses() {
                       options: ["", "", "", "", ""],
                       correctAnswer: 0,
                       solutionVideo: "",
-                      subject: selectedCourseData?.title || "",
+                      subject: selectedCourseData?.titulo || "",
                       examBoard: "", // Nova propriedade para a banca
                     });
                     setSelectedCourse(course.id);
@@ -1101,16 +1184,16 @@ export default function ManageCourses() {
               </div>
               <div>
                 <Label>Curso</Label>
-                <Input
-                  value={selectedSubject}
-                  disabled
-                  className="bg-muted"
-                />
+                <Input value={selectedSubject} disabled className="bg-muted" />
               </div>
               <div>
                 <Label>Módulo</Label>
                 <Input
-                  value={modules[selectedCourse]?.find(m => m.id === selectedModule)?.title || ""}
+                  value={
+                    modules[selectedCourse]?.find(
+                      (m) => m.id === selectedModule
+                    )?.titulo || ""
+                  }
                   disabled
                   className="bg-muted"
                 />
@@ -1264,8 +1347,8 @@ export default function ManageCourses() {
                   </SelectTrigger>
                   <SelectContent>
                     {courses.map((course) => (
-                      <SelectItem key={course.id} value={course.title}>
-                        {course.title}
+                      <SelectItem key={course.id} value={course.titulo}>
+                        {course.titulo}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1503,11 +1586,11 @@ export default function ManageCourses() {
                 <Label htmlFor="edit-title">Título</Label>
                 <Input
                   id="edit-title"
-                  value={editingVideo?.title || ""}
+                  value={editingVideo?.titulo || ""}
                   onChange={(e) =>
                     setEditingVideo((prev) => ({
                       ...prev,
-                      title: e.target.value,
+                      titulo: e.target.value,
                     }))
                   }
                   placeholder="Digite o título da aula"
@@ -1517,11 +1600,11 @@ export default function ManageCourses() {
                 <Label htmlFor="edit-description">Descrição</Label>
                 <Input
                   id="edit-description"
-                  value={editingVideo?.description || ""}
+                  value={editingVideo?.descricao || ""}
                   onChange={(e) =>
                     setEditingVideo((prev) => ({
                       ...prev,
-                      description: e.target.value,
+                      descricao: e.target.value,
                     }))
                   }
                   placeholder="Digite a descrição da aula"
@@ -1531,12 +1614,11 @@ export default function ManageCourses() {
                 <Label htmlFor="edit-url">URL do Vídeo</Label>
                 <Input
                   id="edit-url"
-                  value={editingVideo?.videoUrl || ""}
+                  value={editingVideo?.url_video || ""}
                   onChange={(e) =>
                     setEditingVideo((prev) => ({
                       ...prev,
-                      url: e.target.value,
-                      videoUrl: e.target.value,
+                      url_video: e.target.value,
                     }))
                   }
                   placeholder="Cole a URL do vídeo"
@@ -1557,7 +1639,7 @@ export default function ManageCourses() {
                     Adicionar Recurso
                   </Button>
                 </div>
-                {editingVideo?.resources?.map((resource, index) => (
+                {editingVideo?.recursos?.map((resource, index) => (
                   <div key={index} className="flex gap-2 items-start">
                     <div className="grid gap-2 flex-1">
                       <Input
@@ -1591,7 +1673,9 @@ export default function ManageCourses() {
               </div>
             </div>
             <DialogFooter>
-              <Button type="submit">Salvar Alterações</Button>
+              <Button type="submit" disabled={loading}>
+                {loading ? "Salvando..." : "Salvar Alterações"}
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -1619,14 +1703,14 @@ export default function ManageCourses() {
             <p className="text-sm text-muted-foreground">
               Para confirmar a exclusão do curso{" "}
               <strong className="text-foreground">
-                {courseToDelete?.title}
+                {courseToDelete?.titulo}
               </strong>
               , digite o nome do curso em maiúsculas:
             </p>
             <Input
               value={deleteConfirmation}
               onChange={(e) => setDeleteConfirmation(e.target.value)}
-              placeholder={courseToDelete?.title.toUpperCase()}
+              placeholder={courseToDelete?.titulo.toUpperCase()}
               className="mt-2"
             />
           </div>

@@ -18,6 +18,7 @@ import AdminQuestions from "./pages/admin/Questions";
 import ManageCourses from "./pages/admin/ManageCourses";
 import { AccessProvider } from "./contexts/AccessContext";
 import AccessDenied from "./pages/AccessDenied";
+import ResetPassword from "./pages/ResetPassword";
 
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>
@@ -28,6 +29,7 @@ createRoot(document.getElementById("root")).render(
             <Routes>
               <Route path="/" element={<App />} />
               <Route path="/access-denied" element={<AccessDenied />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
               <Route
                 path="/courses"
                 element={

@@ -1,5 +1,5 @@
 // Importações de bibliotecas React e roteamento
-import React from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 // Importações para gerenciamento de formulário e validação
 import { useForm } from "react-hook-form";
@@ -18,8 +18,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { EyeIcon, EyeOffIcon } from "lucide-react";
 import { Toaster } from "@/components/ui/toaster";
+import { useToast } from "@/components/ui/use-toast";
 // Importações de autenticação e recursos
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "./contexts/AuthContext";
 import logo from "/Imagens/Logo.png";
 
 // Esquema de validação do formulário usando Zod
@@ -37,10 +38,14 @@ function App() {
   const [showPassword, setShowPassword] = React.useState(false);
   const [error, setError] = React.useState("");
   const [loading, setLoading] = React.useState(false);
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetSuccess, setResetSuccess] = useState(false);
 
   // Hooks para navegação e autenticação
   const navigate = useNavigate();
-  const { login, loginWithGoogle } = useAuth();
+  const { login, loginWithGoogle, resetPassword } = useAuth();
+  const { toast } = useToast();
 
   // Configuração do formulário com validação
   const form = useForm({
@@ -74,6 +79,27 @@ function App() {
       navigate("/courses");
     } catch (err) {
       setError("Falha ao fazer login com Google.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Função para lidar com o reset de senha
+  async function handleResetPassword(e) {
+    e.preventDefault();
+    try {
+      setError("");
+      setLoading(true);
+      await resetPassword(resetEmail);
+      setResetSuccess(true);
+      toast({
+        title: "Email enviado!",
+        description: "Verifique sua caixa de entrada para redefinir sua senha.",
+      });
+    } catch (err) {
+      setError(
+        "Falha ao enviar email de reset. Verifique o endereço de email."
+      );
     } finally {
       setLoading(false);
     }
@@ -155,6 +181,18 @@ function App() {
                       </FormItem>
                     )}
                   />
+
+                  {/* Link Esqueceu a senha */}
+                  <div className="text-sm text-right">
+                    <button
+                      type="button"
+                      onClick={() => setShowResetPassword(true)}
+                      className="text-muted-foreground hover:text-primary"
+                    >
+                      Esqueceu sua senha?
+                    </button>
+                  </div>
+
                   {/* Botão de submit com gradiente */}
                   <button
                     type="submit"
@@ -227,6 +265,64 @@ function App() {
           <div className="h-full w-full bg-[radial-gradient(circle_at_center,_rgba(255,255,255,0.1)_0%,_transparent_100%)]" />
         </section>
       </main>
+
+      {/* Modal de Reset de Senha */}
+      {showResetPassword && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-background rounded-lg p-6 w-full max-w-md">
+            <h2 className="text-xl font-semibold mb-4">Resetar Senha</h2>
+
+            {resetSuccess ? (
+              <div className="text-center">
+                <p className="text-green-600 mb-4">
+                  Email enviado com sucesso! Verifique sua caixa de entrada.
+                </p>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setShowResetPassword(false);
+                    setResetSuccess(false);
+                  }}
+                >
+                  Fechar
+                </Button>
+              </div>
+            ) : (
+              <form onSubmit={handleResetPassword} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Email
+                  </label>
+                  <Input
+                    type="email"
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                    placeholder="seu@email.com"
+                    required
+                  />
+                </div>
+
+                <div className="flex justify-end space-x-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowResetPassword(false)}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={loading}
+                    className="bg-primary text-white hover:bg-primary/90"
+                  >
+                    {loading ? "Enviando..." : "Enviar Email"}
+                  </Button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </>
   );
 }

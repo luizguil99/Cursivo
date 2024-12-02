@@ -11,8 +11,7 @@ import {
 } from "@/components/ui/card";
 import { uploadImage } from "@/lib/s3";
 import { useAuth } from "@/contexts/AuthContext";
-import { db } from "@/lib/firebase";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { supabase } from "@/lib/supabase";
 
 export default function FloatingAIChat({ onClose }) {
   const [messages, setMessages] = useState([]);
@@ -27,21 +26,36 @@ export default function FloatingAIChat({ onClose }) {
   // Carregar chat
   useEffect(() => {
     const loadChat = async () => {
-      if (!currentUser) return;
+      if (!currentUser?.id) return;
 
       try {
-        const chatId = `floating_${currentUser.uid}`;
-        const chatRef = doc(db, "chats", chatId);
-        const chatDoc = await getDoc(chatRef);
+        const chatId = `floating_${currentUser.id}`;
+        
+        // Buscar chat existente
+        const { data: chatData, error: chatError } = await supabase
+          .from('chats')
+          .select('*')
+          .eq('id', chatId)
+          .single();
 
-        if (chatDoc.exists()) {
-          setMessages(chatDoc.data().messages || []);
+        if (chatError && chatError.code !== 'PGRST116') { // PGRST116 = not found
+          throw chatError;
+        }
+
+        if (chatData) {
+          setMessages(chatData.mensagens || []);
         } else {
-          const newChat = {
-            userId: currentUser.uid,
-            messages: [],
-          };
-          await setDoc(chatRef, newChat);
+          // Criar novo chat
+          const { error: insertError } = await supabase
+            .from('chats')
+            .insert({
+              id: chatId,
+              usuario_id: currentUser.id,
+              mensagens: [],
+              mensagem: ''
+            });
+
+          if (insertError) throw insertError;
           setMessages([]);
         }
       } catch (error) {
@@ -51,6 +65,26 @@ export default function FloatingAIChat({ onClose }) {
 
     loadChat();
   }, [currentUser]);
+
+  const saveMessages = async (newMessages, lastMessage = '') => {
+    if (!currentUser?.id) return;
+
+    try {
+      const chatId = `floating_${currentUser.id}`;
+      const { error } = await supabase
+        .from('chats')
+        .update({ 
+          mensagens: newMessages,
+          mensagem: lastMessage,
+          atualizado_em: new Date().toISOString()
+        })
+        .eq('id', chatId);
+
+      if (error) throw error;
+    } catch (error) {
+      console.error("Erro ao salvar mensagens:", error);
+    }
+  };
 
   const handleImageUpload = async (event) => {
     const file = event.target.files[0];
@@ -86,13 +120,16 @@ export default function FloatingAIChat({ onClose }) {
 
     try {
       setIsLoading(true);
-      setMessages((prev) => [...prev, newMessage]);
+      const updatedMessages = [...messages, newMessage];
+      setMessages(updatedMessages);
+      await saveMessages(updatedMessages, content);
+      
       setInputMessage("");
       setSelectedImage(null);
       setImageUrl(null);
 
       const messagePayload = {
-        model: "gpt-4o-mini",
+        model: import.meta.env.VITE_OPENAI_MODEL,
         messages: [
           {
             role: "system",
@@ -118,7 +155,8 @@ export default function FloatingAIChat({ onClose }) {
               : content,
           },
         ],
-        max_tokens: 2000,
+        temperature: 0.7,
+        max_tokens: parseInt(import.meta.env.VITE_OPENAI_MAX_TOKENS),
       };
 
       const response = await fetch(
@@ -127,8 +165,7 @@ export default function FloatingAIChat({ onClose }) {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization:
-              "Bearer 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",
+            Authorization: `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`,
           },
           body: JSON.stringify(messagePayload),
         }
@@ -147,31 +184,14 @@ export default function FloatingAIChat({ onClose }) {
         content: responseData.choices[0].message.content,
       };
 
-      // Atualizar mensagens localmente
-      const updatedMessages = [...messages, newMessage, aiMessage];
-      setMessages(updatedMessages);
+      // Atualizar mensagens localmente e salvar no Supabase
+      const newMessages = [...updatedMessages, aiMessage];
+      setMessages(newMessages);
+      await saveMessages(newMessages, aiMessage.content);
 
-      // Salvar no Firestore
-      if (currentUser) {
-        const chatId = `floating_${currentUser.uid}`;
-        const chatRef = doc(db, "chats", chatId);
-        await setDoc(chatRef, {
-          userId: currentUser.uid,
-          messages: updatedMessages,
-        });
-      }
     } catch (error) {
       console.error("Erro ao processar mensagem:", error);
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: `Erro: ${
-            error.message ||
-            "Houve um erro ao processar sua mensagem. Por favor, tente novamente."
-          }`,
-        },
-      ]);
+      setMessages((prev) => [...prev]);
     } finally {
       setIsLoading(false);
     }

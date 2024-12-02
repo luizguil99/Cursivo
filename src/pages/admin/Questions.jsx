@@ -25,17 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  collection,
-  getDocs,
-  addDoc,
-  deleteDoc,
-  doc,
-  query,
-  where,
-  serverTimestamp,
-} from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
 import { PlusCircle, Trash2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
@@ -50,14 +40,14 @@ export default function AdminQuestions() {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const [newQuestion, setNewQuestion] = useState({
-    topic: "",
-    question: "",
-    image: "",
-    options: ["", "", "", "", ""],
-    correctAnswer: 0,
-    solutionVideo: "",
-    subject: "",
-    examBoard: "", // Nova propriedade para a banca
+    topico: "",
+    questao: "",
+    url_imagem: "",
+    opcoes: ["", "", "", "", ""],
+    resposta_correta: 0,
+    video_solucao: "",
+    assunto: "",
+    banca_examinadora: "",
   });
 
   useEffect(() => {
@@ -67,19 +57,18 @@ export default function AdminQuestions() {
 
   useEffect(() => {
     const fetchTopics = async () => {
-      if (!newQuestion.subject) return;
+      if (!newQuestion.assunto) return;
       
       try {
-        const questionsRef = collection(db, "questions");
-        const q = query(questionsRef, where("subject", "==", newQuestion.subject));
-        const querySnapshot = await getDocs(q);
+        const { data: questionsData, error } = await supabase
+          .from('questoes')
+          .select('topico')
+          .eq('assunto', newQuestion.assunto)
+          .not('topico', 'is', null);
         
-        const topics = new Set();
-        querySnapshot.docs.forEach(doc => {
-          const topic = doc.data().topic;
-          if (topic) topics.add(topic);
-        });
+        if (error) throw error;
         
+        const topics = new Set(questionsData.map(q => q.topico));
         setExistingTopics(Array.from(topics));
       } catch (error) {
         console.error("Erro ao buscar tópicos:", error);
@@ -87,16 +76,16 @@ export default function AdminQuestions() {
     };
 
     fetchTopics();
-  }, [newQuestion.subject]);
+  }, [newQuestion.assunto]);
 
   const fetchCourses = async () => {
     try {
-      const coursesRef = collection(db, "courses");
-      const coursesSnapshot = await getDocs(coursesRef);
-      const coursesData = coursesSnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
+      const { data: coursesData, error } = await supabase
+        .from('cursos')
+        .select('*');
+      
+      if (error) throw error;
+      
       setCourses(coursesData);
     } catch (error) {
       console.error("Erro ao buscar cursos:", error);
@@ -105,12 +94,13 @@ export default function AdminQuestions() {
 
   const fetchQuestions = async () => {
     try {
-      const questionsRef = collection(db, "questions");
-      const questionsSnapshot = await getDocs(questionsRef);
-      const questionsData = questionsSnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
+      const { data: questionsData, error } = await supabase
+        .from('questoes')
+        .select('*')
+        .order('criado_em', { ascending: false });
+      
+      if (error) throw error;
+      
       setQuestions(questionsData);
     } catch (error) {
       console.error("Erro ao buscar questões:", error);
@@ -121,23 +111,37 @@ export default function AdminQuestions() {
     e.preventDefault();
     try {
       setLoading(true);
-      await addDoc(collection(db, "questions"), {
-        ...newQuestion,
-        createdAt: serverTimestamp(),
-        createdBy: currentUser.email,
-      });
+      
+      const { data, error } = await supabase
+        .from('questoes')
+        .insert([{
+          topico: newQuestion.topico,
+          questao: newQuestion.questao,
+          url_imagem: newQuestion.url_imagem,
+          opcoes: newQuestion.opcoes,
+          resposta_correta: newQuestion.resposta_correta,
+          video_solucao: newQuestion.video_solucao,
+          assunto: newQuestion.assunto,
+          banca_examinadora: newQuestion.banca_examinadora,
+          criado_por: currentUser.id,
+          criado_em: new Date().toISOString(),
+        }])
+        .select();
+
+      if (error) throw error;
 
       setIsAddQuestionDialogOpen(false);
       setNewQuestion({
-        topic: "",
-        question: "",
-        image: "",
-        options: ["", "", "", "", ""],
-        correctAnswer: 0,
-        solutionVideo: "",
-        subject: "",
-        examBoard: "", // Nova propriedade para a banca
+        topico: "",
+        questao: "",
+        url_imagem: "",
+        opcoes: ["", "", "", "", ""],
+        resposta_correta: 0,
+        video_solucao: "",
+        assunto: "",
+        banca_examinadora: "",
       });
+      
       fetchQuestions();
       toast({
         title: "Sucesso!",
@@ -159,7 +163,13 @@ export default function AdminQuestions() {
     if (!window.confirm("Tem certeza que deseja excluir esta questão?")) return;
 
     try {
-      await deleteDoc(doc(db, "questions", questionId));
+      const { error } = await supabase
+        .from('questoes')
+        .delete()
+        .eq('id', questionId);
+      
+      if (error) throw error;
+      
       fetchQuestions();
       toast({
         title: "Sucesso!",
@@ -201,18 +211,18 @@ export default function AdminQuestions() {
               <div>
                 <Label htmlFor="subject">Matéria</Label>
                 <Select
-                  value={newQuestion.subject}
+                  value={newQuestion.assunto}
                   onValueChange={(value) =>
-                    setNewQuestion({ ...newQuestion, subject: value })
+                    setNewQuestion({ ...newQuestion, assunto: value })
                   }
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Selecione a matéria" />
+                    <SelectValue placeholder="Selecione uma matéria" />
                   </SelectTrigger>
                   <SelectContent>
                     {courses.map((course) => (
-                      <SelectItem key={course.id} value={course.id}>
-                        {course.title}
+                      <SelectItem key={course.id} value={course.titulo}>
+                        {course.titulo}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -220,64 +230,49 @@ export default function AdminQuestions() {
               </div>
 
               <div>
-                <Label htmlFor="examBoard" className="flex items-center gap-2">
-                  Banca
-                  <span className="text-sm text-muted-foreground">(opcional)</span>
-                </Label>
-                <Input
-                  id="examBoard"
-                  value={newQuestion.examBoard}
-                  onChange={(e) =>
-                    setNewQuestion({ ...newQuestion, examBoard: e.target.value })
-                  }
-                  placeholder="Ex: FUVEST, UNICAMP, ENEM"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="topic">Tópico</Label>
-                <div className="flex gap-2 items-center mb-2">
-                  <Button
-                    type="button"
-                    variant={isNewTopic ? "default" : "outline"}
-                    onClick={() => setIsNewTopic(true)}
-                    size="sm"
-                  >
-                    Novo Tópico
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={!isNewTopic ? "default" : "outline"}
-                    onClick={() => setIsNewTopic(false)}
-                    size="sm"
-                  >
-                    Tópico Existente
-                  </Button>
+                <Label>Tópico</Label>
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="radio"
+                      id="existingTopic"
+                      checked={!isNewTopic}
+                      onChange={() => setIsNewTopic(false)}
+                      className="mr-2"
+                    />
+                    <label htmlFor="existingTopic">Usar tópico existente</label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="radio"
+                      id="newTopic"
+                      checked={isNewTopic}
+                      onChange={() => setIsNewTopic(true)}
+                      className="mr-2"
+                    />
+                    <label htmlFor="newTopic">Criar novo tópico</label>
+                  </div>
                 </div>
+
                 {isNewTopic ? (
                   <Input
-                    id="topic"
-                    value={newQuestion.topic}
+                    value={newQuestion.topico}
                     onChange={(e) =>
-                      setNewQuestion({
-                        ...newQuestion,
-                        topic: e.target.value,
-                      })
+                      setNewQuestion({ ...newQuestion, topico: e.target.value })
                     }
                     placeholder="Digite o novo tópico"
+                    className="mt-2"
                   />
                 ) : (
                   <Select
-                    value={newQuestion.topic}
+                    value={newQuestion.topico}
                     onValueChange={(value) =>
-                      setNewQuestion({
-                        ...newQuestion,
-                        topic: value,
-                      })
+                      setNewQuestion({ ...newQuestion, topico: value })
                     }
+                    className="mt-2"
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Selecione um tópico existente" />
+                      <SelectValue placeholder="Selecione um tópico" />
                     </SelectTrigger>
                     <SelectContent>
                       {existingTopics.map((topic) => (
@@ -289,122 +284,93 @@ export default function AdminQuestions() {
                   </Select>
                 )}
               </div>
+
+              <div>
+                <Label htmlFor="examBoard">Banca</Label>
+                <Input
+                  id="examBoard"
+                  value={newQuestion.banca_examinadora}
+                  onChange={(e) =>
+                    setNewQuestion({ ...newQuestion, banca_examinadora: e.target.value })
+                  }
+                  placeholder="Digite a banca"
+                />
+              </div>
+
               <div>
                 <Label htmlFor="question">Enunciado da Questão</Label>
                 <Input
                   id="question"
-                  value={newQuestion.question}
+                  value={newQuestion.questao}
                   onChange={(e) =>
-                    setNewQuestion({
-                      ...newQuestion,
-                      question: e.target.value,
-                    })
+                    setNewQuestion({ ...newQuestion, questao: e.target.value })
                   }
                   placeholder="Digite o enunciado da questão"
                 />
               </div>
+
               <div>
                 <Label htmlFor="image">URL da Imagem (opcional)</Label>
                 <Input
                   id="image"
-                  value={newQuestion.image}
+                  value={newQuestion.url_imagem}
                   onChange={(e) =>
-                    setNewQuestion({
-                      ...newQuestion,
-                      image: e.target.value,
-                    })
+                    setNewQuestion({ ...newQuestion, url_imagem: e.target.value })
                   }
                   placeholder="Cole a URL da imagem"
                 />
               </div>
+
               <div>
                 <Label>Opções de Resposta</Label>
-                {newQuestion.options.slice(0, 4).map((option, index) => (
-                  <div key={index} className="flex gap-2 mt-2">
+                {newQuestion.opcoes.map((option, index) => (
+                  <div key={index} className="flex items-center space-x-2 mt-2">
                     <Input
                       value={option}
                       onChange={(e) => {
-                        const newOptions = [...newQuestion.options];
+                        const newOptions = [...newQuestion.opcoes];
                         newOptions[index] = e.target.value;
-                        setNewQuestion({
-                          ...newQuestion,
-                          options: newOptions,
-                        });
+                        setNewQuestion({ ...newQuestion, opcoes: newOptions });
                       }}
                       placeholder={`Opção ${index + 1}`}
-                      className="flex-1"
                     />
-                    <Button
-                      type="button"
-                      variant={newQuestion.correctAnswer === index ? "default" : "outline"}
-                      onClick={() =>
+                    <input
+                      type="radio"
+                      name="correctAnswer"
+                      checked={newQuestion.resposta_correta === index}
+                      onChange={() =>
                         setNewQuestion({
                           ...newQuestion,
-                          correctAnswer: index,
+                          resposta_correta: index,
                         })
                       }
-                      className={newQuestion.correctAnswer === index ? "bg-green-200 hover:bg-green-300 text-black border-green-300" : ""}
-                    >
-                      Correta
-                    </Button>
+                    />
                   </div>
                 ))}
-                {/* Quinta opção opcional */}
-                <div className="flex gap-2 mt-2">
-                  <Input
-                    value={newQuestion.options[4]}
-                    onChange={(e) => {
-                      const newOptions = [...newQuestion.options];
-                      newOptions[4] = e.target.value;
-                      setNewQuestion({
-                        ...newQuestion,
-                        options: newOptions,
-                      });
-                    }}
-                    placeholder="Opção 5 (opcional)"
-                    className="flex-1"
-                  />
-                  <Button
-                    type="button"
-                    variant={newQuestion.correctAnswer === 4 ? "default" : "outline"}
-                    onClick={() =>
-                      setNewQuestion({
-                        ...newQuestion,
-                        correctAnswer: 4,
-                      })
-                    }
-                    className={newQuestion.correctAnswer === 4 ? "bg-green-200 hover:bg-green-300 text-black border-green-300" : ""}
-                  >
-                    Correta
-                  </Button>
-                </div>
               </div>
+
               <div>
-                <Label htmlFor="solutionVideo">
-                  URL do Vídeo de Resolução (opcional)
-                </Label>
+                <Label htmlFor="solutionVideo">URL do Vídeo da Solução (opcional)</Label>
                 <Input
                   id="solutionVideo"
-                  value={newQuestion.solutionVideo}
+                  value={newQuestion.video_solucao}
                   onChange={(e) =>
                     setNewQuestion({
                       ...newQuestion,
-                      solutionVideo: e.target.value,
+                      video_solucao: e.target.value,
                     })
                   }
-                  placeholder="Cole a URL do vídeo de resolução"
+                  placeholder="Cole a URL do vídeo da solução"
                 />
               </div>
             </div>
+
             <DialogFooter>
               <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsAddQuestionDialogOpen(false)}
+                type="submit"
+                disabled={loading}
+                className="w-full sm:w-auto"
               >
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={loading}>
                 {loading ? "Adicionando..." : "Adicionar Questão"}
               </Button>
             </DialogFooter>
@@ -418,6 +384,7 @@ export default function AdminQuestions() {
             <TableRow>
               <TableHead>Matéria</TableHead>
               <TableHead>Tópico</TableHead>
+              <TableHead>Banca</TableHead>
               <TableHead>Questão</TableHead>
               <TableHead>Ações</TableHead>
             </TableRow>
@@ -425,17 +392,17 @@ export default function AdminQuestions() {
           <TableBody>
             {questions.map((question) => (
               <TableRow key={question.id}>
-                <TableCell>{question.subject}</TableCell>
-                <TableCell>{question.topic}</TableCell>
+                <TableCell>{question.assunto}</TableCell>
+                <TableCell>{question.topico}</TableCell>
+                <TableCell>{question.banca_examinadora}</TableCell>
                 <TableCell className="max-w-md truncate">
-                  {question.question}
+                  {question.questao}
                 </TableCell>
                 <TableCell>
                   <Button
                     variant="ghost"
-                    size="sm"
+                    size="icon"
                     onClick={() => handleDeleteQuestion(question.id)}
-                    className="hover:bg-destructive/20 hover:text-destructive"
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>

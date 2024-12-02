@@ -15,13 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  getFirestore,
-  collection,
-  getDocs,
-  query,
-  where,
-} from "firebase/firestore";
+import { supabase } from "@/lib/supabase";
 import AIChat from "./AIChat";
 
 function PracticeModal({ course, topic, onClose }) {
@@ -51,22 +45,32 @@ function PracticeModal({ course, topic, onClose }) {
       if (!course?.id) return;
 
       try {
-        const db = getFirestore();
-        const questionsRef = collection(db, "questions");
         const courseName = course.name || course.title;
         if (!courseName) {
           console.error("Course name/title not found:", course);
           return;
         }
-        const q = query(questionsRef, where("subject", "==", courseName));
-        const querySnapshot = await getDocs(q);
 
-        const fetchedQuestions = querySnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
+        const { data: questionsData, error } = await supabase
+          .from("questoes")
+          .select("*")
+          .eq("assunto", courseName);
+
+        if (error) throw error;
+
+        // Mapeando os campos do Supabase para o formato esperado pelo componente
+        const mappedQuestions = questionsData.map((q) => ({
+          id: q.id,
+          topic: q.topico,
+          question: q.questao,
+          image: q.url_imagem,
+          options: q.opcoes,
+          correctAnswer: q.resposta_correta,
+          solutionVideo: q.video_solucao,
+          examBoard: q.banca_examinadora,
         }));
 
-        setQuestions(fetchedQuestions);
+        setQuestions(mappedQuestions);
       } catch (error) {
         console.error("Erro ao buscar questões:", error);
       } finally {
@@ -225,57 +229,59 @@ function PracticeModal({ course, topic, onClose }) {
 
             {/* Options */}
             <div className="space-y-2">
-              {currentQuestionData.options.map((option, index) => {
-                let buttonStyle =
-                  "w-full justify-start hover:opacity-100 relative pl-10";
-                if (selectedAnswer !== null) {
-                  if (index === currentQuestionData.correctAnswer) {
-                    buttonStyle +=
-                      " bg-green-500 hover:bg-green-500 text-white";
-                  } else if (
-                    index === selectedAnswer &&
-                    index !== currentQuestionData.correctAnswer
-                  ) {
-                    buttonStyle += " bg-red-500 hover:bg-red-500 text-white";
+              {currentQuestionData.options
+                .filter((option) => option !== "")
+                .map((option, index) => {
+                  let buttonStyle =
+                    "w-full justify-start hover:opacity-100 relative pl-10";
+                  if (selectedAnswer !== null) {
+                    if (index === currentQuestionData.correctAnswer) {
+                      buttonStyle +=
+                        " bg-green-500 hover:bg-green-500 text-white";
+                    } else if (
+                      index === selectedAnswer &&
+                      index !== currentQuestionData.correctAnswer
+                    ) {
+                      buttonStyle += " bg-red-500 hover:bg-red-500 text-white";
+                    }
                   }
-                }
 
-                const isStricken =
-                  strickenOptions[currentQuestionData.id]?.[index] || false;
+                  const isStricken =
+                    strickenOptions[currentQuestionData.id]?.[index] || false;
 
-                return (
-                  <div key={index} className="relative group">
-                    {selectedAnswer === null && (
+                  return (
+                    <div key={index} className="relative group">
+                      {selectedAnswer === null && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            toggleStrike(currentQuestionData.id, index)
+                          }
+                          className="absolute left-0 top-1/2 -translate-y-1/2 z-10 p-2 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-accent"
+                        >
+                          <Scissors className="h-4 w-4" />
+                        </Button>
+                      )}
                       <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          toggleStrike(currentQuestionData.id, index)
-                        }
-                        className="absolute left-0 top-1/2 -translate-y-1/2 z-10 p-2 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-accent"
+                        key={index}
+                        variant="outline"
+                        className={buttonStyle}
+                        onClick={() => !isStricken && handleAnswer(index)}
+                        disabled={selectedAnswer !== null || isStricken}
                       >
-                        <Scissors className="h-4 w-4" />
-                      </Button>
-                    )}
-                    <Button
-                      key={index}
-                      variant="outline"
-                      className={buttonStyle}
-                      onClick={() => !isStricken && handleAnswer(index)}
-                      disabled={selectedAnswer !== null || isStricken}
-                    >
-                      <span
-                        className={isStricken ? "line-through opacity-50" : ""}
-                      >
-                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#F3C92C] text-black font-medium mr-2">
-                          {String.fromCharCode(97 + index)}
+                        <span
+                          className={isStricken ? "line-through opacity-50" : ""}
+                        >
+                          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#F3C92C] text-black font-medium mr-2">
+                            {String.fromCharCode(97 + index)}
+                          </span>
+                          {option}
                         </span>
-                        {option}
-                      </span>
-                    </Button>
-                  </div>
-                );
-              })}
+                      </Button>
+                    </div>
+                  );
+                })}
             </div>
 
             {/* Solution and AI Chat Buttons */}

@@ -2,8 +2,7 @@ import React from "react";
 import { Button } from "@/components/ui/button";
 import { CalendarDays, Plus } from "lucide-react";
 import WeekDay from "./WeekDay";
-import { db } from "@/lib/firebase";
-import { collection, getDocs } from "firebase/firestore";
+import { supabase } from "@/lib/supabase";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const weekDays = [
@@ -32,26 +31,39 @@ function WeeklySchedule({ onClose }) {
   const [draggedItem, setDraggedItem] = React.useState(null);
 
   React.useEffect(() => {
-    const fetchCourses = async () => {
-      try {
-        setLoading(true);
-        const coursesRef = collection(db, "courses");
-        const coursesSnapshot = await getDocs(coursesRef);
-        const coursesData = coursesSnapshot.docs.map((doc) => ({
-          id: doc.id,
-          name: doc.data().title || doc.data().name,
-          color: doc.data().color || "#F3C92C",
-        }));
-        setSubjects(coursesData);
-      } catch (error) {
-        console.error("Erro ao carregar cursos:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchCourses();
   }, []);
+
+  const fetchCourses = async () => {
+    try {
+      setLoading(true);
+      console.log("Buscando cursos...");
+
+      const { data, error } = await supabase.from("cursos").select("*");
+
+      console.log("Resposta do Supabase:", { data, error });
+
+      if (error) throw error;
+
+      if (!data || data.length === 0) {
+        console.log("Nenhum curso encontrado");
+        return;
+      }
+
+      const coursesData = data.map((course) => ({
+        id: course.id,
+        name: course.titulo || course.name || "Curso sem título",
+        color: course.cor || course.color || "#F3C92C",
+      }));
+
+      console.log("Cursos processados:", coursesData);
+      setSubjects(coursesData);
+    } catch (error) {
+      console.error("Erro ao carregar cursos:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleDragStart = (e, item, sourceDay) => {
     setDraggedItem({ item, sourceDay });

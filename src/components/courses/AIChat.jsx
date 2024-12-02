@@ -5,8 +5,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { uploadImage } from "@/lib/s3";
 import { useAuth } from "@/contexts/AuthContext";
-import { db } from "@/lib/firebase";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { supabase } from "@/lib/supabase";
 
 export default function AIChat({ question, selectedAnswer, onClose }) {
   const [messages, setMessages] = useState([]);
@@ -24,25 +23,40 @@ export default function AIChat({ question, selectedAnswer, onClose }) {
       if (!currentUser || !question) return;
 
       try {
-        const chatId = `${currentUser.uid}_${question.id}`;
-        const chatRef = doc(db, "chats", chatId);
-        const chatDoc = await getDoc(chatRef);
+        const chatId = `${currentUser.id}_${question.id}`;
+        
+        // Buscar chat existente
+        const { data: chatData, error: chatError } = await supabase
+          .from("chats")
+          .select("mensagens")
+          .eq("id", chatId)
+          .single();
 
-        if (chatDoc.exists()) {
-          setMessages(chatDoc.data().messages || []);
+        if (chatError && chatError.code !== "PGRST116") {
+          throw chatError;
+        }
+
+        if (chatData) {
+          setMessages(chatData.mensagens || []);
         } else if (question && selectedAnswer !== null) {
           const initialMessage = {
             role: "user",
             content: createInitialMessage(question, selectedAnswer),
           };
 
-          const newChat = {
-            userId: currentUser.uid,
-            questionId: question.id,
-            messages: [initialMessage],
-          };
+          // Criar novo chat
+          const { error: insertError } = await supabase
+            .from("chats")
+            .insert([{
+              id: chatId,
+              usuario_id: currentUser.id,
+              pergunta_id: question.id,
+              mensagens: [initialMessage],
+              mensagem: initialMessage.content
+            }]);
 
-          await setDoc(chatRef, newChat);
+          if (insertError) throw insertError;
+
           setMessages([initialMessage]);
           handleSendMessage(initialMessage.content, true);
         }
@@ -172,15 +186,18 @@ export default function AIChat({ question, selectedAnswer, onClose }) {
       const updatedMessages = [...messages, newMessage, aiMessage];
       setMessages(updatedMessages);
 
-      // Salvar no Firestore
+      // Salvar no Supabase
       if (currentUser && question) {
-        const chatId = `${currentUser.uid}_${question.id}`;
-        const chatRef = doc(db, "chats", chatId);
-        await setDoc(chatRef, {
-          userId: currentUser.uid,
-          questionId: question.id,
-          messages: updatedMessages,
-        });
+        const chatId = `${currentUser.id}_${question.id}`;
+        const { error: updateError } = await supabase
+          .from("chats")
+          .update({ 
+            mensagens: updatedMessages,
+            mensagem: aiMessage.content // última mensagem
+          })
+          .eq("id", chatId);
+
+        if (updateError) throw updateError;
       }
     } catch (error) {
       console.error("Erro ao processar mensagem:", error);
@@ -196,6 +213,13 @@ export default function AIChat({ question, selectedAnswer, onClose }) {
       ]);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage(inputMessage);
     }
   };
 

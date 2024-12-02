@@ -18,20 +18,7 @@ import {
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { useToast } from "../../components/ui/use-toast";
-import {
-  getFirestore,
-  collection,
-  getDocs,
-  query,
-  where,
-  setDoc,
-  doc,
-  serverTimestamp,
-} from "firebase/firestore";
-import {
-  createUserWithEmailAndPassword,
-  getAuth,
-} from "firebase/auth";
+import { supabase } from "@/lib/supabase";
 import { PlusCircle } from "lucide-react";
 
 // Função auxiliar para calcular a data de término do plano
@@ -64,7 +51,6 @@ export default function AdminStudents() {
     plan: "mensal", // default plan
   });
   const { toast } = useToast();
-  const auth = getAuth();
 
   useEffect(() => {
     fetchStudents();
@@ -72,16 +58,14 @@ export default function AdminStudents() {
 
   const fetchStudents = async () => {
     try {
-      const db = getFirestore();
-      const usersRef = collection(db, "users");
-      // Busca apenas usuários que não são admin
-      const q = query(usersRef, where("role", "!=", "admin"));
-      const studentsSnapshot = await getDocs(q);
+      // Buscar apenas usuários que não são admin
+      const { data: studentsData, error } = await supabase
+        .from("perfis")
+        .select("*")
+        .eq("papel", "student");
 
-      const studentsData = studentsSnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
+      if (error) throw error;
+
       setStudents(studentsData);
     } catch (error) {
       console.error("Erro ao buscar alunos:", error);
@@ -95,43 +79,50 @@ export default function AdminStudents() {
 
   const handleDeactivateStudent = async (student) => {
     if (
-      !window.confirm(`Tem certeza que deseja ${student.status === 'active' ? 'desativar' : 'reativar'} o aluno ${student.email}?`)
+      !window.confirm(
+        `Tem certeza que deseja ${
+          student.status === "ativo" ? "desativar" : "reativar"
+        } o aluno ${student.email}?`
+      )
     ) {
       return;
     }
 
     setLoading(true);
     try {
-      const db = getFirestore();
+      const newStatus = student.status === "ativo" ? "inativo" : "ativo";
+      const { error } = await supabase
+        .from("perfis")
+        .update({
+          status: newStatus,
+          status_plano: newStatus,
+          atualizado_em: new Date().toISOString(),
+        })
+        .eq("id", student.id);
 
-      // Atualizar status no Firestore
-      await setDoc(
-        doc(db, "users", student.id),
-        {
-          status: student.status === 'active' ? 'inactive' : 'active',
-          planStatus: student.status === 'active' ? 'expired' : 'active',
-          lastModified: serverTimestamp(),
-          lastModifiedBy: auth.currentUser.email,
-        },
-        { merge: true }
-      );
+      if (error) throw error;
 
       // Atualizar estado local
-      setStudents(students.map(s => 
-        s.id === student.id 
-          ? { 
-              ...s, 
-              status: s.status === 'active' ? 'inactive' : 'active',
-              planStatus: s.status === 'active' ? 'expired' : 'active'
-            } 
-          : s
-      ));
+      setStudents(
+        students.map((s) =>
+          s.id === student.id
+            ? {
+                ...s,
+                status: newStatus,
+                status_plano: newStatus,
+              }
+            : s
+        )
+      );
 
       toast({
-        title: `Aluno ${student.status === 'active' ? 'desativado' : 'reativado'} com sucesso!`,
-        description: student.status === 'active' 
-          ? "O acesso do aluno foi revogado."
-          : "O acesso do aluno foi restaurado.",
+        title: `Aluno ${
+          student.status === "ativo" ? "desativado" : "reativado"
+        } com sucesso!`,
+        description:
+          student.status === "ativo"
+            ? "O acesso do aluno foi revogado."
+            : "O acesso do aluno foi restaurado.",
       });
     } catch (error) {
       console.error("Erro ao modificar status do aluno:", error);
@@ -150,41 +141,60 @@ export default function AdminStudents() {
     setLoading(true);
 
     try {
-      const db = getFirestore();
-
-      // 1. Criar usuário no Authentication
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        newStudent.email,
-        newStudent.password
-      );
-
-      // 2. Adicionar informações do usuário no Firestore
-      const userDoc = {
-        uid: userCredential.user.uid,
-        name: newStudent.name,
+      // 1. Criar usuário no Authentication do Supabase
+      const { data: authData, error: authError } = await supabase.auth.signUp({
         email: newStudent.email,
-        role: "student",
-        createdAt: serverTimestamp(),
-        status: "active",
-        planStatus: "active",
-        lastLogin: null,
-        plan: newStudent.plan,
-        planStartDate: serverTimestamp(),
-        planEndDate: calculatePlanEndDate(newStudent.plan),
-      };
-
-      // Usar o mesmo ID do Authentication como ID do documento no Firestore
-      await setDoc(doc(db, "users", userCredential.user.uid), userDoc);
-
-      toast({
-        title: "Aluno adicionado com sucesso!",
-        description: "O aluno já pode acessar a plataforma.",
+        password: newStudent.password,
+        options: {
+          data: {
+            name: newStudent.name,
+            role: 'student'
+          }
+        }
       });
 
-      setIsAddDialogOpen(false);
-      setNewStudent({ name: "", email: "", password: "", plan: "mensal" });
-      fetchStudents();
+      if (authError) throw authError;
+
+      if (authData?.user) {
+        // 2. Auto-confirmar o email no ambiente self-hosted
+        const { error: confirmError } = await supabase.rpc('confirm_user', {
+          user_id: authData.user.id
+        });
+
+        if (confirmError) {
+          console.error("Erro ao confirmar email:", confirmError);
+        }
+
+        // 3. Adicionar informações do usuário na tabela perfis
+        const { error: profileError } = await supabase.from("perfis").insert([
+          {
+            id: authData.user.id,
+            nome: newStudent.name,
+            email: newStudent.email,
+            papel: "student",
+            status: "ativo",
+            status_plano: "ativo",
+            plano: newStudent.plan,
+            data_inicio_plano: new Date().toISOString(),
+            data_fim_plano: calculatePlanEndDate(newStudent.plan)?.toISOString(),
+          },
+        ]);
+
+        if (profileError) {
+          // Se houver erro ao criar o perfil, tentar deletar o usuário criado
+          await supabase.auth.admin.deleteUser(authData.user.id);
+          throw profileError;
+        }
+
+        toast({
+          title: "Aluno adicionado com sucesso!",
+          description: "O aluno já pode acessar a plataforma.",
+        });
+
+        setIsAddDialogOpen(false);
+        setNewStudent({ name: "", email: "", password: "", plan: "mensal" });
+        fetchStudents();
+      }
     } catch (error) {
       console.error("Erro ao adicionar aluno:", error);
       toast({
@@ -221,44 +231,50 @@ export default function AdminStudents() {
           </TableHeader>
           <TableBody>
             {students.map((student) => (
-              <TableRow 
+              <TableRow
                 key={student.id}
-                className={student.status === 'inactive' ? 'bg-gray-50' : ''}
+                className={student.status === "inativo" ? "bg-gray-50" : ""}
               >
-                <TableCell>{student.name}</TableCell>
+                <TableCell>{student.nome}</TableCell>
                 <TableCell>{student.email}</TableCell>
-                <TableCell>{student.plan || "N/A"}</TableCell>
+                <TableCell>{student.plano || "N/A"}</TableCell>
                 <TableCell>
                   <span
                     className={`px-2 py-1 rounded-full text-xs ${
-                      student.status === "active"
+                      student.status === "ativo"
                         ? "bg-green-100 text-green-800"
                         : "bg-red-100 text-red-800"
                     }`}
                   >
-                    {student.status === "active" ? "Ativo" : "Inativo"}
+                    {student.status === "ativo" ? "Ativo" : "Inativo"}
                   </span>
                 </TableCell>
                 <TableCell>
-                  {student.planEndDate
-                    ? new Date(student.planEndDate.seconds * 1000).toLocaleDateString()
-                    : student.plan === "vitalicio"
+                  {student.data_fim_plano
+                    ? new Date(student.data_fim_plano).toLocaleDateString()
+                    : student.plano === "vitalicio"
                     ? "Nunca"
                     : "N/A"}
                 </TableCell>
                 <TableCell>
-                  {student.lastLogin
-                    ? new Date(student.lastLogin.seconds * 1000).toLocaleDateString()
+                  {student.ultimo_login
+                    ? new Date(student.ultimo_login).toLocaleDateString()
                     : "Nunca acessou"}
                 </TableCell>
                 <TableCell>
                   <Button
-                    variant={student.status === "active" ? "destructive" : "outline"}
+                    variant={
+                      student.status === "ativo" ? "destructive" : "outline"
+                    }
                     size="sm"
                     onClick={() => handleDeactivateStudent(student)}
-                    className={student.status === "active" ? "" : "text-green-600 border-green-600 hover:bg-green-50"}
+                    className={
+                      student.status === "ativo"
+                        ? ""
+                        : "text-green-600 border-green-600 hover:bg-green-50"
+                    }
                   >
-                    {student.status === "active" ? "Desativar" : "Reativar"}
+                    {student.status === "ativo" ? "Desativar" : "Reativar"}
                   </Button>
                 </TableCell>
               </TableRow>

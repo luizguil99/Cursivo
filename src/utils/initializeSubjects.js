@@ -1,44 +1,45 @@
-import { collection, addDoc, getDocs, query, where } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import { courseLessons } from '../data/courseLessons';
+import { courseLessons } from "../data/courseLessons";
+import { supabase } from "../lib/supabase";
 
 export async function initializeSubjects() {
   try {
-    const coursesRef = collection(db, 'courses');
-
     // Verificar quais matérias já existem
-    const existingCoursesQuery = query(coursesRef);
-    const existingCoursesSnapshot = await getDocs(existingCoursesQuery);
-    const existingCourses = existingCoursesSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    const { data: existingCourses, error: fetchError } = await supabase
+      .from("cursos")
+      .select("*");
+
+    if (fetchError) throw fetchError;
 
     // Pegar as matérias do courseLessons
-    const subjects = Object.keys(courseLessons).map(title => ({
-      title,
-      lessons: Object.keys(courseLessons[title] || {}).length,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+    const subjects = Object.keys(courseLessons).map((title) => ({
+      titulo: title,
+      descricao: `Curso de ${title}`,
+      criado_em: new Date().toISOString(),
+      atualizado_em: new Date().toISOString(),
     }));
 
-    // Adicionar ou atualizar matérias
+    // Adicionar matérias que não existem
     for (const subject of subjects) {
-      const existingCourse = existingCourses.find(course => course.title === subject.title);
-      
+      const existingCourse = existingCourses.find(
+        (course) => course.titulo === subject.titulo
+      );
+
       if (!existingCourse) {
         try {
-          await addDoc(coursesRef, subject);
-          console.log(`Matéria ${subject.title} adicionada com sucesso!`);
+          const { error } = await supabase.from("cursos").insert([subject]);
+
+          if (error) throw error;
+
+          console.log(`Matéria ${subject.titulo} adicionada com sucesso!`);
         } catch (error) {
-          console.error(`Erro ao adicionar matéria ${subject.title}:`, error);
+          console.error(`Erro ao adicionar matéria ${subject.titulo}:`, error);
         }
       }
     }
 
     return true;
   } catch (error) {
-    console.error('Erro ao inicializar matérias:', error);
+    console.error("Erro ao inicializar matérias:", error);
     return false;
   }
 }

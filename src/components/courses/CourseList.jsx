@@ -1,126 +1,52 @@
 import React, { useState, useEffect } from "react";
 import CourseListItem from "./CourseListItem";
-import { db } from "@/lib/firebase";
-import { collection, getDocs, addDoc } from "firebase/firestore";
+import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
 import { courseLessons } from "@/data/courseLessons";
 
-const staticCourses = [
-  {
-    id: "1",
-    name: "Artes",
-    progress: 0,
-    icon: "https://images.unsplash.com/photo-1460661419201-fd4cecdf8a8b?w=500",
-  },
-  {
-    id: "2",
-    name: "Biologia",
-    progress: 0,
-    icon: "https://images.unsplash.com/photo-1576086213369-97a306d36557?w=500",
-  },
-  {
-    id: "3",
-    name: "Educação Física",
-    progress: 0,
-    icon: "https://images.unsplash.com/photo-1517963879433-6ad2b056d712?w=500",
-  },
-  {
-    id: "4",
-    name: "Filosofia",
-    progress: 0,
-    icon: "https://images.unsplash.com/photo-1555959910-83e0d5c0ca8c?w=500",
-  },
-  {
-    id: "5",
-    name: "Física",
-    progress: 0,
-    icon: "https://images.unsplash.com/photo-1636466497217-26a8cbeaf0aa?w=500",
-  },
-  {
-    id: "6",
-    name: "Geografia",
-    progress: 0,
-    icon: "https://images.unsplash.com/photo-1524661135-423995f22d0b?w=500",
-  },
-  {
-    id: "7",
-    name: "História",
-    progress: 0,
-    icon: "https://images.unsplash.com/photo-1447069387593-a5de0862481e?w=500",
-  },
-  {
-    id: "8",
-    name: "Língua Estrangeira",
-    progress: 0,
-    icon: "https://images.unsplash.com/photo-1546017847-93abdf8bc6a4?w=500",
-  },
-  {
-    id: "9",
-    name: "Língua Portuguesa",
-    progress: 0,
-    icon: "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?w=500",
-  },
-  {
-    id: "10",
-    name: "Literatura",
-    progress: 0,
-    icon: "https://images.unsplash.com/photo-1474932430478-367dbb6832c1?w=500",
-  },
-  {
-    id: "11",
-    name: "Matemática",
-    progress: 0,
-    icon: "https://images.unsplash.com/photo-1509228468518-180dd4864904?w=500",
-  },
-  {
-    id: "12",
-    name: "Química",
-    progress: 0,
-    icon: "https://images.unsplash.com/photo-1603126857599-f6e157fa2fe6?w=500",
-  },
-  {
-    id: "13",
-    name: "Redação",
-    progress: 0,
-    icon: "https://images.unsplash.com/photo-1455390582262-044cdead277a?w=500",
-  },
-  {
-    id: "14",
-    name: "Sociologia",
-    progress: 0,
-    icon: "https://images.unsplash.com/photo-1582213782179-e0d53f98f2ca?w=500",
-  },
-];
+// Cache object to store courses data
+const coursesCache = {
+  data: null,
+  lastFetch: null,
+  expirationTime: 5 * 60 * 1000, // 5 minutes in milliseconds
+};
 
 function CourseList({ onCourseSelect }) {
   const { currentUser } = useAuth();
-  const [courses, setCourses] = useState(staticCourses);
-  const [loading, setLoading] = useState(true);
+  const [courses, setCourses] = useState(() => coursesCache.data || []);
+  const [loading, setLoading] = useState(!coursesCache.data);
   const [error, setError] = useState(null);
 
   const initializeCoursesIfNeeded = async () => {
     try {
       console.log("Verificando se é necessário inicializar cursos...");
-      const coursesRef = collection(db, "courses");
-      const snapshot = await getDocs(coursesRef);
+      
+      // Verificar se já existem cursos
+      const { data: existingCourses, error: fetchError } = await supabase
+        .from("cursos")
+        .select("*");
 
-      if (snapshot.empty) {
+      if (fetchError) throw fetchError;
+
+      if (!existingCourses?.length) {
         console.log("Nenhum curso encontrado, inicializando...");
+        
+        // Preparar os cursos para inserção
         const subjects = Object.keys(courseLessons).map((title) => ({
-          title,
-          lessons: Object.keys(courseLessons[title] || {}).length,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+          titulo: title,
+          descricao: `Curso de ${title}`,
+          criado_em: new Date().toISOString(),
+          atualizado_em: new Date().toISOString(),
         }));
 
-        for (const subject of subjects) {
-          try {
-            await addDoc(coursesRef, subject);
-            console.log(`Matéria ${subject.title} adicionada com sucesso!`);
-          } catch (error) {
-            console.error(`Erro ao adicionar matéria ${subject.title}:`, error);
-          }
-        }
+        // Inserir os cursos
+        const { error: insertError } = await supabase
+          .from("cursos")
+          .insert(subjects);
+
+        if (insertError) throw insertError;
+        
+        console.log("Cursos inicializados com sucesso!");
         return true;
       }
       return false;
@@ -132,60 +58,71 @@ function CourseList({ onCourseSelect }) {
 
   useEffect(() => {
     const fetchCourses = async () => {
-      try {
-        console.log("Iniciando busca de cursos...");
+      // Check if we have valid cached data
+      const now = Date.now();
+      if (
+        coursesCache.data &&
+        coursesCache.lastFetch &&
+        now - coursesCache.lastFetch < coursesCache.expirationTime
+      ) {
+        setCourses(coursesCache.data);
+        setLoading(false);
+        return;
+      }
 
+      try {
         // Primeiro, verifica se precisa inicializar os cursos
         await initializeCoursesIfNeeded();
 
-        // Agora busca os cursos
-        const coursesRef = collection(db, "courses");
-        const querySnapshot = await getDocs(coursesRef);
-        console.log(
-          "Snapshot recebido, quantidade de docs:",
-          querySnapshot.size
-        );
+        // Buscar cursos
+        const { data: coursesData, error: coursesError } = await supabase
+          .from("cursos")
+          .select("*");
 
-        const coursesData = querySnapshot.docs.map((doc) => {
-          console.log("Processando documento:", doc.id, doc.data());
-          return {
-            id: doc.id,
-            name: doc.data().title, // Ajustando o campo title para name
-            ...doc.data(),
-            progress: 0,
-          };
-        });
+        if (coursesError) throw coursesError;
 
-        console.log("Cursos carregados do Firebase:", coursesData);
+        console.log("Cursos carregados:", coursesData);
 
-        // Buscar progresso do usuário
+        // Buscar progresso do usuário se estiver logado
         if (currentUser) {
-          console.log("Buscando progresso para usuário:", currentUser.uid);
-          const progressRef = collection(db, "userProgress");
-          const progressSnapshot = await getDocs(progressRef);
+          const { data: progressData, error: progressError } = await supabase
+            .from("progresso_usuario")
+            .select("*")
+            .eq("usuario_id", currentUser.id);
 
-          coursesData.forEach((course) => {
-            const userProgress = progressSnapshot.docs.find(
-              (doc) => doc.id === `${currentUser.uid}_${course.id}`
-            );
+          if (progressError) throw progressError;
 
-            if (userProgress) {
-              const completedLessons = Object.keys(
-                userProgress.data().completedLessons || {}
-              ).length;
-              const totalLessons = course.lessons || 0;
-              course.progress =
-                totalLessons > 0 ? (completedLessons / totalLessons) * 100 : 0;
-              console.log(
-                `Progresso do curso ${course.name}:`,
-                course.progress
-              );
-            }
+          // Calcular progresso para cada curso
+          const coursesWithProgress = coursesData.map(course => {
+            const userProgress = progressData?.find(p => p.curso_id === course.id);
+            return {
+              id: course.id,
+              name: course.titulo,
+              description: course.descricao,
+              progress: userProgress?.progresso || 0,
+            };
           });
-        }
 
-        console.log("Atualizando estado com cursos:", coursesData);
-        setCourses(coursesData.length > 0 ? coursesData : staticCourses);
+          // Update cache
+          coursesCache.data = coursesWithProgress;
+          coursesCache.lastFetch = now;
+          
+          setCourses(coursesWithProgress);
+        } else {
+          // Se não estiver logado, mostrar cursos sem progresso
+          const coursesWithoutProgress = coursesData.map(course => ({
+            id: course.id,
+            name: course.titulo,
+            description: course.descricao,
+            progress: 0,
+          }));
+
+          // Update cache
+          coursesCache.data = coursesWithoutProgress;
+          coursesCache.lastFetch = now;
+
+          setCourses(coursesWithoutProgress);
+        }
       } catch (error) {
         console.error("Erro ao buscar cursos:", error);
         setError(error.message);

@@ -1,49 +1,63 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { 
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
+import React, { createContext, useContext, useState, useEffect } from "react";
+import {
+  supabase,
+  signIn,
+  signUp,
   signOut,
-  onAuthStateChanged,
-  GoogleAuthProvider,
-  signInWithPopup
-} from 'firebase/auth';
-import { auth } from '../lib/firebase';
+  signInWithGoogle,
+  isAdmin,
+  resetPassword as resetPasswordEmail,
+} from "../lib/supabase";
 
 const AuthContext = createContext();
 
-export function useAuth() {
+export const useAuth = () => {
   return useContext(AuthContext);
-}
+};
 
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  function signup(email, password) {
-    return createUserWithEmailAndPassword(auth, email, password);
+  async function login(email, password) {
+    return signIn(email, password);
   }
 
-  function login(email, password) {
-    return signInWithEmailAndPassword(auth, email, password);
+  async function signup(email, password) {
+    return signUp(email, password);
   }
 
-  function logout() {
-    return signOut(auth);
+  async function logout() {
+    return signOut();
   }
 
-  function loginWithGoogle() {
-    const provider = new GoogleAuthProvider();
-    return signInWithPopup(auth, provider);
+  async function loginWithGoogle() {
+    return signInWithGoogle();
+  }
+
+  async function resetPassword(email) {
+    return resetPasswordEmail(email);
   }
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      console.log('Auth State Changed:', user?.email);
-      setCurrentUser(user);
+    // Listener para mudanças no estado de autenticação
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log("Auth State Changed:", session?.user?.email);
+      setCurrentUser(session?.user || null);
       setLoading(false);
     });
 
-    return unsubscribe;
+    // Verificar estado inicial
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setCurrentUser(session?.user || null);
+      setLoading(false);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const value = {
@@ -51,7 +65,8 @@ export function AuthProvider({ children }) {
     signup,
     login,
     logout,
-    loginWithGoogle
+    loginWithGoogle,
+    resetPassword,
   };
 
   return (

@@ -21,8 +21,7 @@ import {
   X,
   MessageSquare,
 } from "lucide-react";
-import { doc, addDoc, collection } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
 import TopNav from "@/components/layouts/TopNav";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -213,14 +212,19 @@ function SimulationExam() {
     );
 
     try {
-      await addDoc(collection(db, "simulationHistory"), {
-        userId: currentUser.uid,
-        simulationId: simulation.id,
-        simulationTitle: simulation.title,
-        ...stats,
-        answers,
-        completedAt: new Date().toISOString(),
-      });
+      const { error } = await supabase.from("historico_simulados").insert([
+        {
+          usuario_id: currentUser.id,
+          simulado_id: simulation.id,
+          titulo_simulado: simulation.title,
+          respostas: answers,
+          pontuacao: stats.traditionalScore,
+          pontuacao_tri: stats.triScore,
+          finalizado_em: new Date().toISOString(),
+        },
+      ]);
+
+      if (error) throw error;
     } catch (error) {
       console.error("Erro ao salvar resultado:", error);
     } finally {

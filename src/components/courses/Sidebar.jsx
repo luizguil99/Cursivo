@@ -12,6 +12,7 @@ import {
   Brain,
   Target,
   Lightbulb,
+  Home,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import CourseList from "./CourseList";
@@ -39,6 +40,17 @@ function Sidebar({ onCourseSelect, onScheduleClick }) {
   };
 
   const mainButtons = [
+    {
+      icon: <Home className="h-5 w-5" />,
+      label: "Home",
+      onClick: () => {
+        onCourseSelect(null);
+        navigate("/courses", { 
+          replace: true,
+          state: { showExplore: true }
+        });
+      },
+    },
     {
       icon: <GraduationCap className="h-5 w-5" />,
       label: "Cursos",

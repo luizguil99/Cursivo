@@ -1,31 +1,15 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { PlayCircle, Download, BookOpen, Brain, Trophy } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import FloatingChatButton from "./FloatingChatButton";
 
 function CourseContent({ lesson }) {
   const navigate = useNavigate();
+  const location = useLocation();
 
-  // Função para converter URL do YouTube em URL de embed
-  const getYouTubeEmbedUrl = (url) => {
-    if (!url) return "";
-
-    // Se já for uma URL de embed, retorna ela mesma
-    if (url.includes("youtube.com/embed/")) {
-      return url;
-    }
-
-    // Extrair o ID do vídeo da URL do YouTube
-    const videoId = url.match(
-      /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|v\/|embed\/))([^&?]+)/
-    )?.[1];
-
-    if (!videoId) return url;
-    return `https://www.youtube.com/embed/${videoId}`;
-  };
-
-  if (!lesson) {
+  // Se não houver lição ou se showExplore for true, mostra a página de exploração
+  if (!lesson || location.state?.showExplore) {
     return (
       <div className="h-full overflow-y-auto">
         <div className="max-w-6xl mx-auto p-6 space-y-6">
@@ -186,6 +170,24 @@ function CourseContent({ lesson }) {
       </div>
     );
   }
+
+  // Função para converter URL do YouTube em URL de embed
+  const getYouTubeEmbedUrl = (url) => {
+    if (!url) return "";
+
+    // Se já for uma URL de embed, retorna ela mesma
+    if (url.includes("youtube.com/embed/")) {
+      return url;
+    }
+
+    // Extrair o ID do vídeo da URL do YouTube
+    const videoId = url.match(
+      /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|v\/|embed\/))([^&?]+)/
+    )?.[1];
+
+    if (!videoId) return url;
+    return `https://www.youtube.com/embed/${videoId}`;
+  };
 
   // Converter a URL do vídeo para URL de embed
   const embedUrl = getYouTubeEmbedUrl(lesson.videoUrl);

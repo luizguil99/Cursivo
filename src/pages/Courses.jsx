@@ -5,15 +5,7 @@ import ModulesSidebar from "@/components/courses/ModulesSidebar";
 import CourseContent from "@/components/courses/CourseContent";
 import WeeklySchedule from "@/components/schedule/WeeklySchedule";
 import TopNav from "@/components/TopNav";
-import { db } from "../lib/firebase";
-import {
-  doc,
-  getDoc,
-  collection,
-  query,
-  where,
-  getDocs,
-} from "firebase/firestore";
+import { supabase } from "../lib/supabase";
 
 function Courses() {
   const location = useLocation();
@@ -28,36 +20,71 @@ function Courses() {
   useEffect(() => {
     const loadCourseData = async () => {
       if (id) {
-        // Carregar dados do curso
-        const courseDoc = await getDoc(doc(db, "courses", id));
-        if (courseDoc.exists()) {
-          setSelectedCourse({
-            id: courseDoc.id,
-            ...courseDoc.data(),
-          });
+        try {
+          // Carregar dados do curso
+          const { data: courseData, error: courseError } = await supabase
+            .from("cursos")
+            .select("*")
+            .eq("id", id)
+            .single();
 
-          // Se tiver moduleId, carregar o módulo
-          if (moduleId) {
-            const moduleDoc = await getDoc(doc(db, "modules", moduleId));
-            if (moduleDoc.exists()) {
-              setSelectedModule({
-                id: moduleDoc.id,
-                ...moduleDoc.data(),
-              });
+          if (courseError) throw courseError;
+          if (courseData) {
+            setSelectedCourse({
+              id: courseData.id,
+              name: courseData.titulo, // Usando titulo como name para compatibilidade
+              ...courseData,
+            });
 
-              // Se tiver lessonId, carregar a lição
-              if (lessonId) {
-                const lessonDoc = await getDoc(doc(db, "videos", lessonId));
-                if (lessonDoc.exists()) {
-                  setSelectedLesson({
-                    id: lessonDoc.id,
-                    ...lessonDoc.data(),
-                  });
+            // Se tiver moduleId, carregar o módulo
+            if (moduleId) {
+              const { data: moduleData, error: moduleError } = await supabase
+                .from("modulos")
+                .select("*")
+                .eq("id", moduleId)
+                .single();
+
+              if (moduleError) throw moduleError;
+              if (moduleData) {
+                setSelectedModule({
+                  id: moduleData.id,
+                  title: moduleData.titulo,
+                  ...moduleData,
+                });
+
+                // Se tiver lessonId, carregar a lição
+                if (lessonId) {
+                  const { data: lessonData, error: lessonError } =
+                    await supabase
+                      .from("videoaulas")
+                      .select("*")
+                      .eq("id", lessonId)
+                      .single();
+
+                  if (lessonError) throw lessonError;
+                  if (lessonData) {
+                    console.log("Dados da videoaula carregados:", lessonData);
+                    setSelectedLesson({
+                      id: lessonData.id,
+                      title: lessonData.titulo,
+                      description: lessonData.descricao,
+                      videoUrl: lessonData.url_video,
+                      resources: lessonData.recursos || [],
+                      ...lessonData,
+                    });
+                  }
                 }
               }
             }
           }
+        } catch (error) {
+          console.error("Erro ao carregar dados:", error);
         }
+      } else {
+        // Reset states when there's no ID in the URL
+        setSelectedCourse(null);
+        setSelectedModule(null);
+        setSelectedLesson(null);
       }
     };
 
@@ -65,7 +92,16 @@ function Courses() {
   }, [id, moduleId, lessonId]);
 
   const handleLessonSelect = (lesson) => {
-    setSelectedLesson(lesson);
+    console.log("Aula selecionada:", lesson);
+    // Formatando os dados da lição para o formato esperado pelo CourseContent
+    setSelectedLesson({
+      id: lesson.id,
+      title: lesson.titulo,
+      description: lesson.descricao,
+      videoUrl: lesson.url_video,
+      resources: lesson.recursos || [],
+      ...lesson,
+    });
     setShowSchedule(false);
   };
 

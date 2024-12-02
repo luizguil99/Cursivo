@@ -10,8 +10,12 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import PracticeModal from "./PracticeModal";
-import { db } from "@/lib/firebase";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { supabase } from "@/lib/supabase";
+
+// Skeleton component for module titles
+const ModuleTitleSkeleton = () => (
+  <span className="animate-pulse bg-gray-300 rounded h-4 w-24 inline-block"></span>
+);
 
 function ModulesSidebar({ course, onSelectLesson }) {
   const navigate = useNavigate();
@@ -19,6 +23,7 @@ function ModulesSidebar({ course, onSelectLesson }) {
   const [selectedTopic, setSelectedTopic] = useState(null);
   const [modules, setModules] = useState([]);
   const [videos, setVideos] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [currentCourse, setCurrentCourse] = useState(course);
 
   useEffect(() => {
@@ -33,36 +38,35 @@ function ModulesSidebar({ course, onSelectLesson }) {
         console.log("Buscando módulos e aulas para o curso:", course.id);
 
         // Buscar módulos do curso
-        const moduleQuery = query(
-          collection(db, "modules"),
-          where("courseId", "==", course.id)
-        );
-        const moduleSnapshot = await getDocs(moduleQuery);
-        const modulesData = moduleSnapshot.docs
-          .map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-          }))
-          .sort((a, b) => (a.order || 0) - (b.order || 0));
+        const { data: modulesData, error: modulesError } = await supabase
+          .from("modulos")
+          .select("*")
+          .eq("curso_id", course.id)
+          .order("ordem_indice", { ascending: true });
+
+        if (modulesError) throw modulesError;
+
         console.log("Módulos encontrados:", modulesData);
         setModules(modulesData);
 
         // Buscar vídeos do curso
-        const videoQuery = query(
-          collection(db, "videos"),
-          where("courseId", "==", course.id)
-        );
-        const videoSnapshot = await getDocs(videoQuery);
-        const videosData = videoSnapshot.docs
-          .map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-          }))
-          .sort((a, b) => (a.order || 0) - (b.order || 0));
+        const { data: videosData, error: videosError } = await supabase
+          .from("videoaulas")
+          .select("*")
+          .in(
+            "modulo_id",
+            modulesData.map((m) => m.id)
+          )
+          .order("ordem_indice", { ascending: true });
+
+        if (videosError) throw videosError;
+
         console.log("Vídeos encontrados:", videosData);
         setVideos(videosData);
       } catch (error) {
         console.error("Erro ao buscar módulos e aulas:", error);
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -72,8 +76,8 @@ function ModulesSidebar({ course, onSelectLesson }) {
   // Organizar vídeos por módulo e ordenar por ordem
   const videosByModule = modules.reduce((acc, module) => {
     acc[module.id] = videos
-      .filter((video) => video.moduleId === module.id)
-      .sort((a, b) => (a.order || 0) - (b.order || 0));
+      .filter((video) => video.modulo_id === module.id)
+      .sort((a, b) => (a.ordem_indice || 0) - (b.ordem_indice || 0));
     return acc;
   }, {});
 
@@ -122,28 +126,36 @@ function ModulesSidebar({ course, onSelectLesson }) {
         {/* Modules List */}
         <div className="flex-1 overflow-y-auto">
           <Accordion type="single" collapsible className="w-full">
-            {modules.map((module) => (
-              <AccordionItem key={module.id} value={module.id}>
-                <AccordionTrigger className="hover:bg-accent hover:no-underline px-4">
-                  <span className="text-sm font-medium">{module.title}</span>
-                </AccordionTrigger>
-                <AccordionContent>
-                  <div className="space-y-1 p-1">
-                    {videosByModule[module.id]?.map((video) => (
-                      <Button
-                        key={video.id}
-                        variant="ghost"
-                        className="w-full justify-start gap-2 h-auto py-2 px-4 font-normal"
-                        onClick={() => handleLessonSelect(video, module)}
-                      >
-                        <PlayCircle className="h-4 w-4 shrink-0" />
-                        <span className="truncate text-sm">{video.title}</span>
-                      </Button>
-                    ))}
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
-            ))}
+            {modules.length === 0 && loading
+              ? [...Array(3)].map((_, index) => (
+                  <AccordionItem key={index} value={`skeleton-${index}`}>
+                    <AccordionTrigger className="hover:bg-accent hover:no-underline px-4">
+                      <ModuleTitleSkeleton />
+                    </AccordionTrigger>
+                  </AccordionItem>
+                ))
+              : modules.map((module) => (
+                  <AccordionItem key={module.id} value={module.id}>
+                    <AccordionTrigger className="hover:bg-accent hover:no-underline px-4">
+                      <span className="text-sm font-medium">{module.titulo}</span>
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <div className="space-y-1 p-1">
+                        {videosByModule[module.id]?.map((video) => (
+                          <Button
+                            key={video.id}
+                            variant="ghost"
+                            className="w-full justify-start gap-2 h-auto py-2 px-4 font-normal"
+                            onClick={() => handleLessonSelect(video, module)}
+                          >
+                            <PlayCircle className="h-4 w-4 shrink-0" />
+                            <span className="truncate text-sm">{video.titulo}</span>
+                          </Button>
+                        ))}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
           </Accordion>
         </div>
       </aside>

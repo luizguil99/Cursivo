@@ -9,6 +9,10 @@ import AdminDashboard from "@/pages/admin/Dashboard";
 import AdminStudents from "@/pages/admin/Students";
 import AdminQuestions from "@/pages/admin/Questions";
 import ManageCourses from "@/pages/admin/ManageCourses";
+import ResetPassword from "@/pages/ResetPassword";
+import UpdatePassword from "@/pages/UpdatePassword";
+import SimulationHistory from "@/pages/SimulationHistory";
+import SimulationExam from "@/pages/SimulationExam";
 
 export default function Routes() {
   return (
@@ -16,6 +20,8 @@ export default function Routes() {
       {/* Rotas públicas */}
       <Route path="/plano-expirado" element={<PlanExpired />} />
       <Route path="/access-denied" element={<AccessDenied />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/update-password" element={<UpdatePassword />} />
 
       {/* Rotas de cursos */}
       <Route path="/" element={<Courses />} />
@@ -28,6 +34,10 @@ export default function Routes() {
       />
       <Route path="/study-guide" element={<StudyGuide />} />
       <Route path="/performance" element={<Performance />} />
+
+      {/* Rotas de simulados */}
+      <Route path="/simulations/history" element={<SimulationHistory />} />
+      <Route path="/simulations/:simulationId" element={<SimulationExam />} />
 
       {/* Rotas administrativas */}
       <Route path="/admin" element={<AdminDashboard />} />
