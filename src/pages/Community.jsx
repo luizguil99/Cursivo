@@ -9,7 +9,12 @@ import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { createDiscussion, supabase } from "@/lib/supabase";
+import {
+  createDiscussion,
+  supabase,
+  toggleDiscussionLike,
+  addComment,
+} from "@/lib/supabase";
 import { toast } from "@/components/ui/use-toast";
 import { ThumbsUp, MessageCircle, Share2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -41,6 +46,10 @@ export default function Community() {
   const [quickPost, setQuickPost] = useState("");
   const [posting, setPosting] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [commentText, setCommentText] = useState("");
+  const [activeDiscussion, setActiveDiscussion] = useState(null);
+  const [isCommenting, setIsCommenting] = useState(false);
+  const [isLiking, setIsLiking] = useState(false);
 
   const getAvatarUrl = (user, style) => {
     if (!style && user?.user_metadata?.avatar_style) {
@@ -92,6 +101,67 @@ export default function Community() {
     }
   };
 
+  const handleLike = async (discussionId) => {
+    if (!currentUser) {
+      toast({
+        variant: "destructive",
+        description: "Você precisa estar logado para curtir uma publicação.",
+      });
+      return;
+    }
+
+    setIsLiking(true);
+    try {
+      await toggleDiscussionLike(discussionId, currentUser.id);
+      refreshDiscussions();
+      toast({
+        description: "Ação realizada com sucesso!",
+      });
+    } catch (error) {
+      console.error("Erro ao curtir/descurtir:", error);
+      toast({
+        variant: "destructive",
+        description: "Erro ao processar sua ação.",
+      });
+    } finally {
+      setIsLiking(false);
+    }
+  };
+
+  const handleComment = async (discussionId) => {
+    if (!currentUser) {
+      toast({
+        variant: "destructive",
+        description: "Você precisa estar logado para comentar.",
+      });
+      return;
+    }
+
+    setActiveDiscussion(discussionId);
+    setIsCommenting(true);
+  };
+
+  const submitComment = async (discussionId) => {
+    if (!commentText.trim()) return;
+
+    try {
+      await addComment(discussionId, commentText, currentUser.id);
+      setCommentText("");
+      setActiveDiscussion(null);
+      setIsCommenting(false);
+      await refreshDiscussions();
+      toast({
+        description: "Comentário adicionado com sucesso!",
+      });
+    } catch (error) {
+      console.error("Erro ao adicionar comentário:", error);
+      toast({
+        variant: "destructive",
+        description: "Erro ao adicionar comentário.",
+      });
+    }
+  };
+
   const handleQuickPost = async (e) => {
     e.preventDefault();
     if (!quickPost.trim()) return;
@@ -106,12 +176,12 @@ export default function Community() {
 
       // Limpa o input e atualiza a lista
       setQuickPost("");
-      const editor = document.querySelector('.tiptap');
+      const editor = document.querySelector(".tiptap");
       if (editor) {
-        editor.innerHTML = '';
+        editor.innerHTML = "";
       }
       refreshDiscussions();
-      
+
       toast({
         description: "Publicação criada com sucesso!",
       });
@@ -201,7 +271,7 @@ export default function Community() {
                     <form onSubmit={handleQuickPost}>
                       <RichTextEditor
                         value={quickPost}
-                        onChange={setQuickPost}
+                        onChange={(value) => setQuickPost(value)}
                         placeholder="O que você está pensando?"
                       />
                       <div className="mt-4 flex justify-end">
@@ -254,19 +324,100 @@ export default function Community() {
                           }}
                         />
                         <div className="mt-4 flex items-center space-x-4">
-                          <button className="flex items-center space-x-1 text-gray-500 hover:text-blue-600">
+                          <button
+                            onClick={() => handleLike(discussion.id)}
+                            disabled={isLiking}
+                            className={`flex items-center space-x-1 ${
+                              discussion.user_has_liked
+                                ? "text-blue-600"
+                                : "text-gray-500 hover:text-blue-600"
+                            }`}
+                          >
                             <ThumbsUp className="h-4 w-4" />
-                            <span className="text-xs">Curtir</span>
+                            <span className="text-xs">
+                              {discussion.likes_count || 0} Curtir
+                            </span>
                           </button>
-                          <button className="flex items-center space-x-1 text-gray-500 hover:text-blue-600">
+                          <button
+                            onClick={() => handleComment(discussion.id)}
+                            className="flex items-center space-x-1 text-gray-500 hover:text-blue-600"
+                          >
                             <MessageCircle className="h-4 w-4" />
-                            <span className="text-xs">Comentar</span>
+                            <span className="text-xs">
+                              {discussion.comments_count || 0} Comentar
+                            </span>
                           </button>
                           <button className="flex items-center space-x-1 text-gray-500 hover:text-blue-600">
                             <Share2 className="h-4 w-4" />
                             <span className="text-xs">Compartilhar</span>
                           </button>
                         </div>
+
+                        {activeDiscussion === discussion.id && isCommenting && (
+                          <div className="mt-4">
+                            <RichTextEditor
+                              value={commentText}
+                              onChange={(value) => setCommentText(value)}
+                              placeholder="Escreva seu comentário..."
+                            />
+                            <div className="mt-2 flex justify-end space-x-2">
+                              <Button
+                                variant="outline"
+                                onClick={() => {
+                                  setActiveDiscussion(null);
+                                  setIsCommenting(false);
+                                  setCommentText("");
+                                }}
+                              >
+                                Cancelar
+                              </Button>
+                              <Button
+                                onClick={() => submitComment(discussion.id)}
+                                disabled={!commentText.trim()}
+                              >
+                                Comentar
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+
+                        {discussion.comments?.length > 0 && (
+                          <div className="mt-4 space-y-4">
+                            <Separator />
+                            {discussion.comments.map((comment) => (
+                              <div key={comment.id} className="flex space-x-3">
+                                <Avatar className="h-8 w-8">
+                                  <AvatarImage
+                                    src={
+                                      comment?.user_metadata?.avatar_url ||
+                                      getAvatarUrl(comment)
+                                    }
+                                    alt={getUserDisplayName(comment)}
+                                  />
+                                  <AvatarFallback>
+                                    {getInitials(getUserDisplayName(comment))}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div className="flex-1">
+                                  <div className="flex items-center space-x-2">
+                                    <p className="text-sm font-medium">
+                                      {getUserDisplayName(comment)}
+                                    </p>
+                                    <span className="text-xs text-gray-500">
+                                      {formatDate(comment.created_at)}
+                                    </span>
+                                  </div>
+                                  <div
+                                    className="text-sm text-gray-700"
+                                    dangerouslySetInnerHTML={{
+                                      __html: comment.content,
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

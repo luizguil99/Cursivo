@@ -165,13 +165,35 @@ export const getUserProgress = async (userId) => {
 // Buscar todas as discussões
 export const getDiscussions = async () => {
   try {
+    // Primeiro busca o usuário atual
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
+
+    // Buscar discussões com comentários e likes
     const { data, error } = await supabase
       .from("discussions")
-      .select("*")
-      .order("created_at", { ascending: false });
+      .select(`
+        *,
+        comments:discussion_comments(
+          *
+        ),
+        likes:discussion_likes(
+          *
+        )
+      `)
+      .order('created_at', { ascending: false });
 
     if (error) throw error;
-    return data;
+
+    // Processa os dados para o formato esperado
+    const processedData = data.map(discussion => ({
+      ...discussion,
+      comments: discussion.comments || [],
+      comments_count: discussion.comments?.length || 0,
+      likes_count: discussion.likes?.length || 0,
+      user_has_liked: discussion.likes?.some(like => like.user_id === currentUser?.id) || false
+    }));
+
+    return processedData;
   } catch (error) {
     console.error("Erro ao buscar discussões:", error);
     return [];
@@ -228,7 +250,7 @@ export const createDiscussion = async (title, content, userId) => {
           title,
           content,
           user_id: userId,
-          user_metadata: userData.user.user_metadata
+          user_metadata: userData.user.user_metadata,
         },
       ])
       .select()
@@ -245,6 +267,11 @@ export const createDiscussion = async (title, content, userId) => {
 // Adicionar comentário em uma discussão
 export const addComment = async (discussionId, content, userId) => {
   try {
+    // Primeiro busca os dados do usuário
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError) throw userError;
+
+    // Insere o comentário
     const { data, error } = await supabase
       .from("discussion_comments")
       .insert([
@@ -252,19 +279,10 @@ export const addComment = async (discussionId, content, userId) => {
           discussion_id: discussionId,
           content,
           user_id: userId,
-          likes_count: 0,
+          user_metadata: userData.user.user_metadata,
         },
       ])
-      .select(
-        `
-        *,
-        user:user_id (
-          id,
-          email,
-          user_metadata
-        )
-      `
-      )
+      .select('*, discussion:discussion_id(*)')
       .single();
 
     if (error) throw error;
@@ -279,7 +297,13 @@ export const addComment = async (discussionId, content, userId) => {
 
     if (updateError) throw updateError;
 
-    return data;
+    return {
+      ...data,
+      user: {
+        id: userId,
+        user_metadata: userData.user.user_metadata
+      }
+    };
   } catch (error) {
     console.error("Erro ao adicionar comentário:", error);
     throw error;

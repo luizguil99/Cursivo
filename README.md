@@ -627,3 +627,155 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Dar permissão para usuários autenticados chamarem a função
 GRANT EXECUTE ON FUNCTION confirm_user TO authenticated;
+
+## Configuração do Supabase (SQL)
+
+Cole o seguinte SQL no SQL Editor do Supabase:
+
+```sql
+-- Criar tabela de discussões
+CREATE TABLE IF NOT EXISTS discussions (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    title TEXT,
+    content TEXT NOT NULL,
+    user_id UUID REFERENCES auth.users(id),
+    user_metadata JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW())
+);
+
+-- Criar tabela de comentários
+CREATE TABLE IF NOT EXISTS discussion_comments (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    discussion_id UUID REFERENCES discussions(id) ON DELETE CASCADE,
+    content TEXT NOT NULL,
+    user_id UUID REFERENCES auth.users(id),
+    user_metadata JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW())
+);
+
+-- Criar tabela de curtidas
+CREATE TABLE IF NOT EXISTS discussion_likes (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    discussion_id UUID REFERENCES discussions(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES auth.users(id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()),
+    UNIQUE(discussion_id, user_id)
+);
+
+-- Função para incrementar contador de comentários
+CREATE OR REPLACE FUNCTION increment_comments_count(discussion_id UUID)
+RETURNS void AS $$
+BEGIN
+  -- A contagem é calculada automaticamente pelo número de registros
+  -- Não precisamos mais manter um contador separado
+  RETURN;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Função para decrementar contador de comentários
+CREATE OR REPLACE FUNCTION decrement_comments_count(discussion_id UUID)
+RETURNS void AS $$
+BEGIN
+  -- A contagem é calculada automaticamente pelo número de registros
+  -- Não precisamos mais manter um contador separado
+  RETURN;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Função para alternar curtida
+CREATE OR REPLACE FUNCTION toggle_discussion_like(p_discussion_id UUID, p_user_id UUID)
+RETURNS TABLE (
+  success BOOLEAN,
+  message TEXT,
+  likes_count BIGINT
+) AS $$
+DECLARE
+  v_exists BOOLEAN;
+BEGIN
+  -- Verifica se já existe uma curtida
+  SELECT EXISTS (
+    SELECT 1 
+    FROM discussion_likes 
+    WHERE discussion_id = p_discussion_id AND user_id = p_user_id
+  ) INTO v_exists;
+  
+  IF v_exists THEN
+    -- Remove a curtida se existir
+    DELETE FROM discussion_likes 
+    WHERE discussion_id = p_discussion_id AND user_id = p_user_id;
+    
+    RETURN QUERY
+    SELECT 
+      TRUE as success,
+      'Like removed successfully'::TEXT as message,
+      (SELECT COUNT(*) FROM discussion_likes WHERE discussion_id = p_discussion_id) as likes_count;
+  ELSE
+    -- Adiciona a curtida se não existir
+    INSERT INTO discussion_likes (discussion_id, user_id)
+    VALUES (p_discussion_id, p_user_id);
+    
+    RETURN QUERY
+    SELECT 
+      TRUE as success,
+      'Like added successfully'::TEXT as message,
+      (SELECT COUNT(*) FROM discussion_likes WHERE discussion_id = p_discussion_id) as likes_count;
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RETURN QUERY
+    SELECT 
+      FALSE as success,
+      SQLERRM as message,
+      0::BIGINT as likes_count;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Políticas de segurança (RLS)
+ALTER TABLE discussions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE discussion_comments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE discussion_likes ENABLE ROW LEVEL SECURITY;
+
+-- Política para discussões
+CREATE POLICY "Discussões visíveis para todos os usuários autenticados"
+ON discussions FOR SELECT
+TO authenticated
+USING (true);
+
+CREATE POLICY "Usuários podem criar suas próprias discussões"
+ON discussions FOR INSERT
+TO authenticated
+WITH CHECK (auth.uid() = user_id);
+
+-- Política para comentários
+CREATE POLICY "Comentários visíveis para todos os usuários autenticados"
+ON discussion_comments FOR SELECT
+TO authenticated
+USING (true);
+
+CREATE POLICY "Usuários podem criar seus próprios comentários"
+ON discussion_comments FOR INSERT
+TO authenticated
+WITH CHECK (auth.uid() = user_id);
+
+-- Política para curtidas
+CREATE POLICY "Curtidas visíveis para todos os usuários autenticados"
+ON discussion_likes FOR SELECT
+TO authenticated
+USING (true);
+
+CREATE POLICY "Usuários podem gerenciar suas próprias curtidas"
+ON discussion_likes FOR ALL
+TO authenticated
+USING (auth.uid() = user_id)
+WITH CHECK (auth.uid() = user_id);
+```
+
+Este SQL irá:
+1. Criar as tabelas necessárias (discussions, discussion_comments, discussion_likes)
+2. Criar as funções para gerenciar comentários e curtidas
+3. Configurar as políticas de segurança (RLS)
+4. Estabelecer as relações entre as tabelas
+
+Execute este SQL no SQL Editor do Supabase para configurar corretamente o banco de dados.
