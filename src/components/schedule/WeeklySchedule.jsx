@@ -4,6 +4,14 @@ import { CalendarDays, Plus } from "lucide-react";
 import WeekDay from "./WeekDay";
 import { supabase } from "@/lib/supabase";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  getScheduleBlocks,
+  addScheduleBlock,
+  updateScheduleBlock,
+  deleteScheduleBlock,
+  moveScheduleBlock,
+} from "@/lib/supabase";
 
 const weekDays = [
   { id: "monday", name: "Segunda" },
@@ -16,6 +24,7 @@ const weekDays = [
 ];
 
 function WeeklySchedule({ onClose }) {
+  const { currentUser } = useAuth();
   const [schedule, setSchedule] = React.useState({
     monday: [],
     tuesday: [],
@@ -31,17 +40,25 @@ function WeeklySchedule({ onClose }) {
   const [draggedItem, setDraggedItem] = React.useState(null);
 
   React.useEffect(() => {
-    fetchCourses();
-  }, []);
+    if (currentUser?.id) {
+      fetchCourses();
+      fetchSchedule();
+    }
+  }, [currentUser]);
+
+  const fetchSchedule = async () => {
+    try {
+      const scheduleData = await getScheduleBlocks(currentUser.id);
+      setSchedule(scheduleData);
+    } catch (error) {
+      console.error("Erro ao carregar cronograma:", error);
+    }
+  };
 
   const fetchCourses = async () => {
     try {
       setLoading(true);
-      console.log("Buscando cursos...");
-
       const { data, error } = await supabase.from("cursos").select("*");
-
-      console.log("Resposta do Supabase:", { data, error });
 
       if (error) throw error;
 
@@ -56,7 +73,6 @@ function WeeklySchedule({ onClose }) {
         color: course.cor || course.color || "#F3C92C",
       }));
 
-      console.log("Cursos processados:", coursesData);
       setSubjects(coursesData);
     } catch (error) {
       console.error("Erro ao carregar cursos:", error);
@@ -80,7 +96,7 @@ function WeeklySchedule({ onClose }) {
     e.dataTransfer.dropEffect = "move";
   };
 
-  const handleDrop = (e, targetDay) => {
+  const handleDrop = async (e, targetDay) => {
     e.preventDefault();
 
     if (!draggedItem) return;
@@ -89,45 +105,119 @@ function WeeklySchedule({ onClose }) {
 
     if (sourceDay === targetDay) return;
 
+    // Primeiro atualiza a UI
     setSchedule((prev) => ({
       ...prev,
       [sourceDay]: prev[sourceDay].filter((i) => i.id !== item.id),
-      [targetDay]: [
-        ...prev[targetDay],
-        {
-          ...item,
-          id: `${item.name.toLowerCase()}-${Date.now()}`,
-        },
-      ],
+      [targetDay]: [...prev[targetDay], item],
     }));
+
+    // Depois persiste no banco de dados
+    try {
+      await moveScheduleBlock(item.id, targetDay);
+    } catch (error) {
+      console.error("Erro ao mover bloco:", error);
+      // Em caso de erro, reverte a UI para o estado anterior
+      setSchedule((prev) => ({
+        ...prev,
+        [targetDay]: prev[targetDay].filter((i) => i.id !== item.id),
+        [sourceDay]: [...prev[sourceDay], item],
+      }));
+    }
   };
 
-  const addSubject = (dayId, subject) => {
+  const handleAddSubject = async (dayId, subject) => {
     const newSubject = {
-      id: `${subject.id}-${Date.now()}`,
       name: subject.name,
       duration: "1h",
       color: subject.color,
     };
 
+    // Cria um ID temporário para atualização otimista
+    const tempId = `temp-${Date.now()}`;
+    const tempBlock = { ...newSubject, id: tempId };
+
+    // Primeiro atualiza a UI
     setSchedule((prev) => ({
       ...prev,
-      [dayId]: [...prev[dayId], newSubject],
+      [dayId]: [...prev[dayId], tempBlock],
     }));
+
+    // Depois persiste no banco de dados
+    try {
+      const savedBlock = await addScheduleBlock(currentUser.id, dayId, newSubject);
+      // Atualiza o bloco temporário com o bloco real do banco
+      setSchedule((prev) => ({
+        ...prev,
+        [dayId]: prev[dayId].map((block) =>
+          block.id === tempId ? savedBlock : block
+        ),
+      }));
+    } catch (error) {
+      console.error("Erro ao adicionar bloco:", error);
+      // Em caso de erro, remove o bloco temporário
+      setSchedule((prev) => ({
+        ...prev,
+        [dayId]: prev[dayId].filter((block) => block.id !== tempId),
+      }));
+    }
   };
 
-  const handleEditBlock = (editedBlock) => {
+  const handleEditBlock = async (editedBlock) => {
     const dayId = Object.keys(schedule).find((day) =>
       schedule[day].some((item) => item.id === editedBlock.id)
     );
 
     if (dayId) {
+      // Primeiro atualiza a UI
       setSchedule((prev) => ({
         ...prev,
         [dayId]: prev[dayId].map((item) =>
           item.id === editedBlock.id ? editedBlock : item
         ),
       }));
+
+      // Depois persiste no banco de dados
+      try {
+        await updateScheduleBlock(editedBlock.id, editedBlock);
+      } catch (error) {
+        console.error("Erro ao atualizar bloco:", error);
+        // Em caso de erro, reverte para o bloco original
+        const originalBlock = schedule[dayId].find(
+          (item) => item.id === editedBlock.id
+        );
+        setSchedule((prev) => ({
+          ...prev,
+          [dayId]: prev[dayId].map((item) =>
+            item.id === editedBlock.id ? originalBlock : item
+          ),
+        }));
+      }
+    }
+  };
+
+  const handleDeleteBlock = async (blockId, dayId) => {
+    // Guarda o bloco que será removido para caso precise restaurar
+    const blockToDelete = schedule[dayId].find((block) => block.id === blockId);
+
+    // Primeiro atualiza a UI
+    setSchedule((prev) => ({
+      ...prev,
+      [dayId]: prev[dayId].filter((item) => item.id !== blockId),
+    }));
+
+    // Depois persiste no banco de dados
+    try {
+      await deleteScheduleBlock(blockId);
+    } catch (error) {
+      console.error("Erro ao remover bloco:", error);
+      // Em caso de erro, restaura o bloco
+      if (blockToDelete) {
+        setSchedule((prev) => ({
+          ...prev,
+          [dayId]: [...prev[dayId], blockToDelete],
+        }));
+      }
     }
   };
 
@@ -171,7 +261,7 @@ function WeeklySchedule({ onClose }) {
                       key={subject.id}
                       variant="outline"
                       className="flex items-center gap-2"
-                      onClick={() => addSubject("monday", subject)}
+                      onClick={() => handleAddSubject("monday", subject)}
                       style={{
                         borderColor: subject.color,
                         color: subject.color,
@@ -187,12 +277,11 @@ function WeeklySchedule({ onClose }) {
                     className="flex items-center gap-2 border-gray-500 text-gray-500 border-2"
                     onClick={() => {
                       const customBlock = {
-                        id: `custom-${Date.now()}`,
                         name: "Bloco Personalizado",
                         color: "#808080",
                         duration: "1h",
                       };
-                      addSubject("monday", customBlock);
+                      handleAddSubject("monday", customBlock);
                     }}
                   >
                     <Plus className="h-4 w-4" />
@@ -216,18 +305,9 @@ function WeeklySchedule({ onClose }) {
                   <div className="flex-1 p-2 min-h-[100px]">
                     <WeekDay
                       items={schedule[day.id]}
-                      onDragStart={(e, item) =>
-                        handleDragStart(e, item, day.id)
-                      }
+                      onDragStart={(e, item) => handleDragStart(e, item, day.id)}
                       onDragEnd={handleDragEnd}
-                      onDelete={(itemId) => {
-                        setSchedule((prev) => ({
-                          ...prev,
-                          [day.id]: prev[day.id].filter(
-                            (item) => item.id !== itemId
-                          ),
-                        }));
-                      }}
+                      onDelete={(blockId) => handleDeleteBlock(blockId, day.id)}
                       onEdit={handleEditBlock}
                     />
                   </div>

@@ -166,12 +166,15 @@ export const getUserProgress = async (userId) => {
 export const getDiscussions = async () => {
   try {
     // Primeiro busca o usuário atual
-    const { data: { user: currentUser } } = await supabase.auth.getUser();
+    const {
+      data: { user: currentUser },
+    } = await supabase.auth.getUser();
 
     // Buscar discussões com comentários e likes
     const { data, error } = await supabase
       .from("discussions")
-      .select(`
+      .select(
+        `
         *,
         comments:discussion_comments(
           *
@@ -179,18 +182,21 @@ export const getDiscussions = async () => {
         likes:discussion_likes(
           *
         )
-      `)
-      .order('created_at', { ascending: false });
+      `
+      )
+      .order("created_at", { ascending: false });
 
     if (error) throw error;
 
     // Processa os dados para o formato esperado
-    const processedData = data.map(discussion => ({
+    const processedData = data.map((discussion) => ({
       ...discussion,
       comments: discussion.comments || [],
       comments_count: discussion.comments?.length || 0,
       likes_count: discussion.likes?.length || 0,
-      user_has_liked: discussion.likes?.some(like => like.user_id === currentUser?.id) || false
+      user_has_liked:
+        discussion.likes?.some((like) => like.user_id === currentUser?.id) ||
+        false,
     }));
 
     return processedData;
@@ -282,7 +288,7 @@ export const addComment = async (discussionId, content, userId) => {
           user_metadata: userData.user.user_metadata,
         },
       ])
-      .select('*, discussion:discussion_id(*)')
+      .select("*, discussion:discussion_id(*)")
       .single();
 
     if (error) throw error;
@@ -301,8 +307,8 @@ export const addComment = async (discussionId, content, userId) => {
       ...data,
       user: {
         id: userId,
-        user_metadata: userData.user.user_metadata
-      }
+        user_metadata: userData.user.user_metadata,
+      },
     };
   } catch (error) {
     console.error("Erro ao adicionar comentário:", error);
@@ -359,4 +365,117 @@ export const getUserAvatar = (user) => {
   return `https://api.dicebear.com/7.x/${style}/svg?seed=${encodeURIComponent(
     seed
   )}&backgroundType=gradientLinear&backgroundColor=b6e3f4,c0aede,d1d4f9`;
+};
+
+// Funções para o cronograma semanal
+export const getScheduleBlocks = async (userId) => {
+  try {
+    const { data, error } = await supabase
+      .from('schedule_blocks')
+      .select('*')
+      .eq('user_id', userId);
+
+    if (error) throw error;
+
+    // Organizar os blocos por dia
+    const schedule = {
+      monday: [],
+      tuesday: [],
+      wednesday: [],
+      thursday: [],
+      friday: [],
+      saturday: [],
+      sunday: [],
+    };
+
+    data.forEach(block => {
+      if (schedule[block.day_id]) {
+        schedule[block.day_id].push({
+          id: block.id,
+          name: block.name,
+          duration: block.duration,
+          color: block.color
+        });
+      }
+    });
+
+    return schedule;
+  } catch (error) {
+    console.error('Erro ao buscar blocos do cronograma:', error);
+    throw error;
+  }
+};
+
+export const addScheduleBlock = async (userId, dayId, block) => {
+  try {
+    const { data, error } = await supabase
+      .from('schedule_blocks')
+      .insert([{
+        user_id: userId,
+        day_id: dayId,
+        name: block.name,
+        duration: block.duration,
+        color: block.color
+      }])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Erro ao adicionar bloco ao cronograma:', error);
+    throw error;
+  }
+};
+
+export const updateScheduleBlock = async (blockId, block) => {
+  try {
+    const { data, error } = await supabase
+      .from('schedule_blocks')
+      .update({
+        name: block.name,
+        duration: block.duration,
+        color: block.color
+      })
+      .eq('id', blockId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Erro ao atualizar bloco do cronograma:', error);
+    throw error;
+  }
+};
+
+export const deleteScheduleBlock = async (blockId) => {
+  try {
+    const { error } = await supabase
+      .from('schedule_blocks')
+      .delete()
+      .eq('id', blockId);
+
+    if (error) throw error;
+  } catch (error) {
+    console.error('Erro ao deletar bloco do cronograma:', error);
+    throw error;
+  }
+};
+
+export const moveScheduleBlock = async (blockId, newDayId) => {
+  try {
+    const { data, error } = await supabase
+      .from('schedule_blocks')
+      .update({ day_id: newDayId })
+      .eq('id', blockId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Erro ao mover bloco do cronograma:', error);
+    throw error;
+  }
 };
