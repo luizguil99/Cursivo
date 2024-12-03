@@ -72,20 +72,18 @@ export const createAdminProfile = async (user) => {
   if (!user) return false;
 
   try {
-    const { error: createError } = await supabase
-      .from("perfis")
-      .insert([
-        {
-          id: user.id,
-          email: user.email,
-          nome: user.user_metadata?.name || 'Admin',
-          papel: "admin",
-          status: "ativo",
-          status_plano: "ativo",
-          plano: "vitalicio",
-          data_inicio_plano: new Date().toISOString(),
-        },
-      ]);
+    const { error: createError } = await supabase.from("perfis").insert([
+      {
+        id: user.id,
+        email: user.email,
+        nome: user.user_metadata?.name || "Admin",
+        papel: "admin",
+        status: "ativo",
+        status_plano: "ativo",
+        plano: "vitalicio",
+        data_inicio_plano: new Date().toISOString(),
+      },
+    ]);
 
     if (createError) throw createError;
     return true;
@@ -99,7 +97,7 @@ export const createAdminProfile = async (user) => {
 const ADMIN_EMAILS = [
   "admin@admin.com",
   "admin@cursivo.com",
-  "cursivo@admin.com"
+  "cursivo@admin.com",
 ];
 
 // Função para verificar se é admin
@@ -160,4 +158,181 @@ export const getUserProgress = async (userId) => {
     console.error("Erro ao buscar progresso:", error);
     throw error;
   }
+};
+
+// Funções da Comunidade
+
+// Buscar todas as discussões
+export const getDiscussions = async () => {
+  try {
+    const { data, error } = await supabase
+      .from("discussions")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error("Erro ao buscar discussões:", error);
+    return [];
+  }
+};
+
+// Buscar uma discussão específica
+export const getDiscussion = async (id) => {
+  try {
+    const { data, error } = await supabase
+      .from("discussions")
+      .select(
+        `
+        *,
+        user:user_id (
+          id,
+          email,
+          user_metadata
+        ),
+        comments:discussion_comments (
+          id,
+          content,
+          created_at,
+          user:user_id (
+            id,
+            email,
+            user_metadata
+          )
+        )
+      `
+      )
+      .eq("id", id)
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error("Erro ao buscar discussão:", error);
+    return null;
+  }
+};
+
+// Criar uma nova discussão
+export const createDiscussion = async (title, content, userId) => {
+  try {
+    // Primeiro busca os dados do usuário
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError) throw userError;
+
+    const { data, error } = await supabase
+      .from("discussions")
+      .insert([
+        {
+          title,
+          content,
+          user_id: userId,
+          user_metadata: userData.user.user_metadata
+        },
+      ])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error("Erro ao criar discussão:", error);
+    throw error;
+  }
+};
+
+// Adicionar comentário em uma discussão
+export const addComment = async (discussionId, content, userId) => {
+  try {
+    const { data, error } = await supabase
+      .from("discussion_comments")
+      .insert([
+        {
+          discussion_id: discussionId,
+          content,
+          user_id: userId,
+          likes_count: 0,
+        },
+      ])
+      .select(
+        `
+        *,
+        user:user_id (
+          id,
+          email,
+          user_metadata
+        )
+      `
+      )
+      .single();
+
+    if (error) throw error;
+
+    // Atualiza o contador de comentários na discussão
+    const { error: updateError } = await supabase.rpc(
+      "increment_comments_count",
+      {
+        discussion_id: discussionId,
+      }
+    );
+
+    if (updateError) throw updateError;
+
+    return data;
+  } catch (error) {
+    console.error("Erro ao adicionar comentário:", error);
+    throw error;
+  }
+};
+
+// Curtir/descurtir uma discussão
+export const toggleDiscussionLike = async (discussionId, userId) => {
+  try {
+    const { error } = await supabase.rpc("toggle_discussion_like", {
+      p_discussion_id: discussionId,
+      p_user_id: userId,
+    });
+
+    if (error) throw error;
+  } catch (error) {
+    console.error("Erro ao curtir/descurtir discussão:", error);
+    throw error;
+  }
+};
+
+// Funções de Avatar
+export const updateUserAvatar = async (userId, style) => {
+  try {
+    // Usa o ID do usuário como seed para consistência
+    const avatarUrl = `https://api.dicebear.com/7.x/${style}/svg?seed=${encodeURIComponent(
+      userId
+    )}&backgroundType=gradientLinear&backgroundColor=b6e3f4,c0aede,d1d4f9`;
+
+    const { error } = await supabase.auth.updateUser({
+      data: {
+        avatar_style: style,
+        avatar_url: avatarUrl,
+      },
+    });
+
+    if (error) throw error;
+    return avatarUrl;
+  } catch (error) {
+    console.error("Erro ao atualizar avatar:", error);
+    throw error;
+  }
+};
+
+export const getUserAvatar = (user) => {
+  if (user?.user_metadata?.avatar_url) {
+    return user.user_metadata.avatar_url;
+  }
+
+  // Se não tiver avatar salvo, gera um com estilo padrão
+  const seed = user?.id || user?.email || "default";
+  const style = user?.user_metadata?.avatar_style || "adventurer";
+  return `https://api.dicebear.com/7.x/${style}/svg?seed=${encodeURIComponent(
+    seed
+  )}&backgroundType=gradientLinear&backgroundColor=b6e3f4,c0aede,d1d4f9`;
 };

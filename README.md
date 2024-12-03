@@ -51,6 +51,254 @@ Diretório study-guide/: Componentes do guia de estudos
 Componentes de Tema:
 theme-provider.jsx: Provedor de tema da aplicação
 theme-toggle.jsx: Alternador de tema (claro/escuro)
+Componentes da Comunidade:
+Community.jsx: Página principal da comunidade que exibe:
+- Discussões Recentes
+- Membros Ativos
+- Eventos
+
+## Estrutura do Banco de Dados (Supabase)
+
+1. Tabela discussions:
+   - Armazena discussões criadas pelos usuários
+   - Campos: id, title, content, user_id, created_at, updated_at, likes_count, comments_count
+
+2. Tabela discussion_comments:
+   - Armazena comentários em discussões
+   - Campos: id, discussion_id, user_id, content, created_at, updated_at, likes_count
+
+3. Tabela events:
+   - Armazena eventos da comunidade
+   - Campos: id, title, description, start_date, end_date, location, is_online, meeting_link, created_by, created_at, updated_at, max_participants, current_participants
+
+4. Tabela event_participants:
+   - Registra participantes dos eventos
+   - Campos: id, event_id, user_id, registered_at
+
+5. Tabela user_status:
+   - Controla status online dos usuários
+   - Campos: user_id, is_online, last_seen, status_message
+
+## Estrutura do Banco de Dados - Comunidade
+
+### Tabelas da Comunidade
+
+#### discussions
+```sql
+create table if not exists public.discussions (
+  id uuid default uuid_generate_v4() primary key,
+  title text not null,
+  content text not null,
+  user_id uuid references auth.users(id) not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  user_metadata jsonb
+);
+
+-- Habilita RLS
+alter table public.discussions enable row level security;
+
+-- Políticas
+create policy "Enable read access for all users" on public.discussions
+  for select using (true);
+
+create policy "Enable insert access for authenticated users" on public.discussions
+  for insert with check (auth.uid() = user_id);
+
+create policy "Enable insert with user_metadata" on public.discussions
+  for insert with check (
+    auth.uid() = user_id AND 
+    (user_metadata->>'email')::text = auth.jwt()->>'email'
+  );
+```
+
+#### discussion_comments
+```sql
+create table if not exists public.discussion_comments (
+  id uuid default uuid_generate_v4() primary key,
+  discussion_id uuid references public.discussions(id) on delete cascade not null,
+  content text not null,
+  user_id uuid references auth.users(id) not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+```
+
+#### discussion_likes
+```sql
+create table if not exists public.discussion_likes (
+  id uuid default uuid_generate_v4() primary key,
+  discussion_id uuid references public.discussions(id) on delete cascade not null,
+  user_id uuid references auth.users(id) not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  unique (discussion_id, user_id)
+);
+```
+
+### Políticas de Segurança (RLS)
+
+Todas as tabelas da comunidade têm Row Level Security (RLS) habilitado com as seguintes políticas:
+
+#### discussions
+```sql
+-- Habilita RLS
+alter table public.discussions enable row level security;
+
+-- Políticas
+create policy "Enable read access for all users" on public.discussions
+  for select using (true);
+
+create policy "Enable insert access for authenticated users" on public.discussions
+  for insert with check (auth.uid() = user_id);
+
+create policy "Enable insert with user_metadata" on public.discussions
+  for insert with check (
+    auth.uid() = user_id AND 
+    (user_metadata->>'email')::text = auth.jwt()->>'email'
+  );
+```
+
+#### discussion_comments
+```sql
+-- Habilita RLS
+alter table public.discussion_comments enable row level security;
+
+-- Políticas
+create policy "Enable read access for all users" on public.discussion_comments
+  for select using (true);
+
+create policy "Enable insert access for authenticated users" on public.discussion_comments
+  for insert with check (auth.uid() = user_id);
+```
+
+#### discussion_likes
+```sql
+-- Habilita RLS
+alter table public.discussion_likes enable row level security;
+
+-- Políticas
+create policy "Enable read access for all users" on public.discussion_likes
+  for select using (true);
+
+create policy "Enable insert/delete access for authenticated users" on public.discussion_likes
+  for all using (auth.uid() = user_id);
+```
+
+### Stored Procedures da Comunidade
+
+#### Contadores de Comentários
+```sql
+-- Função para incrementar contador de comentários
+create or replace function increment_comments_count(discussion_id uuid)
+returns void as $$
+begin
+  update discussions
+  set comments_count = comments_count + 1
+  where id = discussion_id;
+end;
+$$ language plpgsql security definer;
+
+-- Função para decrementar contador de comentários
+create or replace function decrement_comments_count(discussion_id uuid)
+returns void as $$
+begin
+  update discussions
+  set comments_count = greatest(0, comments_count - 1)
+  where id = discussion_id;
+end;
+$$ language plpgsql security definer;
+```
+
+#### Sistema de Likes
+```sql
+-- Função para alternar likes em discussões
+create or replace function toggle_discussion_like(p_discussion_id uuid, p_user_id uuid)
+returns void as $$
+declare
+  like_exists boolean;
+begin
+  -- Verifica se o like existe
+  select exists(
+    select 1 from discussion_likes
+    where discussion_id = p_discussion_id and user_id = p_user_id
+  ) into like_exists;
+  
+  if like_exists then
+    -- Remove o like
+    delete from discussion_likes
+    where discussion_id = p_discussion_id and user_id = p_user_id;
+    
+    -- Decrementa o contador de likes
+    update discussions
+    set likes_count = greatest(0, likes_count - 1)
+    where id = p_discussion_id;
+  else
+    -- Adiciona o like
+    insert into discussion_likes (discussion_id, user_id)
+    values (p_discussion_id, p_user_id);
+    
+    -- Incrementa o contador de likes
+    update discussions
+    set likes_count = likes_count + 1
+    where id = p_discussion_id;
+  end if;
+end;
+$$ language plpgsql security definer;
+```
+
+#### Colunas Adicionais
+```sql
+-- Adiciona colunas de contadores se não existirem
+alter table discussions 
+add column if not exists likes_count integer default 0,
+add column if not exists comments_count integer default 0;
+```
+
+### Funcionalidades da Comunidade
+
+A seção de comunidade do Cursivo oferece as seguintes funcionalidades:
+
+1. **Discussões**
+   - Criação de novas discussões com título e conteúdo
+   - Suporte a rich text com formatação
+   - Upload de imagens
+   - Visualização em tempo real
+
+2. **Comentários**
+   - Adição de comentários em discussões
+   - Contagem automática de comentários
+   - Notificações de novos comentários
+
+3. **Sistema de Likes**
+   - Curtir/descurtir discussões
+   - Contagem automática de likes
+   - Atualização em tempo real
+
+4. **Segurança**
+   - Row Level Security (RLS) em todas as tabelas
+   - Políticas de acesso baseadas em autenticação
+   - Proteção contra injeção SQL
+
+5. **Performance**
+   - Stored procedures otimizadas
+   - Índices automáticos em chaves primárias e estrangeiras
+   - Cascade deletes para manter integridade referencial
+
+Funcionalidades:
+- Criação e participação em discussões
+- Comentários em discussões
+- Criação e inscrição em eventos
+- Visualização de membros ativos
+- Status online de usuários
+
+Políticas de Segurança:
+- Todas as tabelas têm Row Level Security (RLS) habilitada
+- Usuários autenticados podem:
+  - Ver todas as discussões, comentários e eventos
+  - Criar novas discussões e comentários
+  - Editar suas próprias discussões e comentários
+  - Criar eventos e se inscrever em eventos
+  - Atualizar seu próprio status
 
 regras no supabase:
 -- Habilitar a extensão UUID
@@ -294,6 +542,9 @@ BEGIN
   );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Dar permissão para usuários autenticados chamarem a função
+GRANT EXECUTE ON FUNCTION eh_admin TO authenticated;
 
 -- Adicionar política para permitir que admins vejam todos os dados
 CREATE POLICY "Admins podem ver todos os dados"

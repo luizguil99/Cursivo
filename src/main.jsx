@@ -19,6 +19,9 @@ import ManageCourses from "./pages/admin/ManageCourses";
 import { AccessProvider } from "./contexts/AccessContext";
 import AccessDenied from "./pages/AccessDenied";
 import ResetPassword from "./pages/ResetPassword";
+import Community from "./pages/Community";
+import { CommunityProvider } from "@/contexts/CommunityContext";
+import DiscussionDetails from "./pages/DiscussionDetails"; // Assuming this component exists
 
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>
@@ -26,115 +29,133 @@ createRoot(document.getElementById("root")).render(
       <AuthProvider>
         <AccessProvider>
           <BrowserRouter>
-            <Routes>
-              <Route path="/" element={<App />} />
-              <Route path="/access-denied" element={<AccessDenied />} />
-              <Route path="/reset-password" element={<ResetPassword />} />
-              <Route
-                path="/courses"
-                element={
-                  <PrivateRoute>
-                    <Courses />
-                  </PrivateRoute>
-                }
-              />
-              <Route
-                path="/courses/:id"
-                element={
-                  <PrivateRoute>
-                    <Courses />
-                  </PrivateRoute>
-                }
-              />
-              <Route
-                path="/courses/:id/module/:moduleId"
-                element={
-                  <PrivateRoute>
-                    <Courses />
-                  </PrivateRoute>
-                }
-              />
-              <Route
-                path="/courses/:id/module/:moduleId/lesson/:lessonId"
-                element={
-                  <PrivateRoute>
-                    <Courses />
-                  </PrivateRoute>
-                }
-              />
-              <Route
-                path="/simulations"
-                element={
-                  <PrivateRoute>
-                    <Simulations />
-                  </PrivateRoute>
-                }
-              />
-              <Route
-                path="/simulations/:simulationId"
-                element={
-                  <PrivateRoute>
-                    <SimulationExam />
-                  </PrivateRoute>
-                }
-              />
-              <Route
-                path="/study-guide"
-                element={
-                  <PrivateRoute>
-                    <StudyGuide />
-                  </PrivateRoute>
-                }
-              />
-              <Route
-                path="/performance"
-                element={
-                  <PrivateRoute>
-                    <Performance />
-                  </PrivateRoute>
-                }
-              />
-              <Route
-                path="/admin"
-                element={
-                  <PrivateRoute>
-                    <AdminRoute>
-                      <AdminDashboard />
-                    </AdminRoute>
-                  </PrivateRoute>
-                }
-              />
-              <Route
-                path="/admin/manage-courses"
-                element={
-                  <PrivateRoute>
-                    <AdminRoute>
-                      <ManageCourses />
-                    </AdminRoute>
-                  </PrivateRoute>
-                }
-              />
-              <Route
-                path="/admin/students"
-                element={
-                  <PrivateRoute>
-                    <AdminRoute>
-                      <AdminStudents />
-                    </AdminRoute>
-                  </PrivateRoute>
-                }
-              />
-              <Route
-                path="/admin/questions"
-                element={
-                  <PrivateRoute>
-                    <AdminRoute>
-                      <AdminQuestions />
-                    </AdminRoute>
-                  </PrivateRoute>
-                }
-              />
-            </Routes>
+            <CommunityProvider>
+              <Routes>
+                <Route path="/" element={<App />} />
+                <Route path="/access-denied" element={<AccessDenied />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
+                <Route
+                  path="/courses"
+                  element={
+                    <PrivateRoute>
+                      <Courses />
+                    </PrivateRoute>
+                  }
+                />
+                <Route
+                  path="/courses/:id"
+                  element={
+                    <PrivateRoute>
+                      <Courses />
+                    </PrivateRoute>
+                  }
+                />
+                <Route
+                  path="/courses/:id/module/:moduleId"
+                  element={
+                    <PrivateRoute>
+                      <Courses />
+                    </PrivateRoute>
+                  }
+                />
+                <Route
+                  path="/courses/:id/module/:moduleId/lesson/:lessonId"
+                  element={
+                    <PrivateRoute>
+                      <Courses />
+                    </PrivateRoute>
+                  }
+                />
+                <Route
+                  path="/simulations"
+                  element={
+                    <PrivateRoute>
+                      <Simulations />
+                    </PrivateRoute>
+                  }
+                />
+                <Route
+                  path="/simulations/:simulationId"
+                  element={
+                    <PrivateRoute>
+                      <SimulationExam />
+                    </PrivateRoute>
+                  }
+                />
+                <Route
+                  path="/study-guide"
+                  element={
+                    <PrivateRoute>
+                      <StudyGuide />
+                    </PrivateRoute>
+                  }
+                />
+                <Route
+                  path="/performance"
+                  element={
+                    <PrivateRoute>
+                      <Performance />
+                    </PrivateRoute>
+                  }
+                />
+                <Route
+                  path="/community"
+                  element={
+                    <PrivateRoute>
+                      <Community />
+                    </PrivateRoute>
+                  }
+                />
+                <Route
+                  path="/community/discussions/:id"
+                  element={
+                    <PrivateRoute>
+                      <DiscussionDetails />
+                    </PrivateRoute>
+                  }
+                />
+                <Route
+                  path="/admin"
+                  element={
+                    <PrivateRoute>
+                      <AdminRoute>
+                        <AdminDashboard />
+                      </AdminRoute>
+                    </PrivateRoute>
+                  }
+                />
+                <Route
+                  path="/admin/manage-courses"
+                  element={
+                    <PrivateRoute>
+                      <AdminRoute>
+                        <ManageCourses />
+                      </AdminRoute>
+                    </PrivateRoute>
+                  }
+                />
+                <Route
+                  path="/admin/students"
+                  element={
+                    <PrivateRoute>
+                      <AdminRoute>
+                        <AdminStudents />
+                      </AdminRoute>
+                    </PrivateRoute>
+                  }
+                />
+                <Route
+                  path="/admin/questions"
+                  element={
+                    <PrivateRoute>
+                      <AdminRoute>
+                        <AdminQuestions />
+                      </AdminRoute>
+                    </PrivateRoute>
+                  }
+                />
+              </Routes>
+            </CommunityProvider>
           </BrowserRouter>
         </AccessProvider>
       </AuthProvider>

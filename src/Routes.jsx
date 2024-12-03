@@ -13,6 +13,7 @@ import ResetPassword from "@/pages/ResetPassword";
 import UpdatePassword from "@/pages/UpdatePassword";
 import SimulationHistory from "@/pages/SimulationHistory";
 import SimulationExam from "@/pages/SimulationExam";
+import Community from "@/pages/Community";
 
 export default function Routes() {
   return (
@@ -38,6 +39,9 @@ export default function Routes() {
       {/* Rotas de simulados */}
       <Route path="/simulations/history" element={<SimulationHistory />} />
       <Route path="/simulations/:simulationId" element={<SimulationExam />} />
+
+      {/* Rota da comunidade */}
+      <Route path="/community" element={<Community />} />
 
       {/* Rotas administrativas */}
       <Route path="/admin" element={<AdminDashboard />} />
