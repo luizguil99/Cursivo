@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import TopNav from "@/components/TopNav";
-import Sidebar from "@/components/courses/Sidebar";
+import CommunitySidebar from "@/components/community/CommunitySidebar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAccess } from "@/contexts/AccessContext";
 import { useCommunity } from "@/contexts/CommunityContext";
@@ -42,6 +42,7 @@ export default function Community() {
     discussions,
     loading: discussionsLoading,
     refreshDiscussions,
+    setDiscussions,
   } = useCommunity();
   const [quickPost, setQuickPost] = useState("");
   const [posting, setPosting] = useState(false);
@@ -110,21 +111,36 @@ export default function Community() {
       return;
     }
 
-    setIsLiking(true);
+    // Encontra a discussão atual
+    const discussion = discussions.find((d) => d.id === discussionId);
+    if (!discussion) return;
+
+    // Atualiza o estado localmente primeiro (otimista)
+    const updatedDiscussions = discussions.map((d) => {
+      if (d.id === discussionId) {
+        return {
+          ...d,
+          likes_count: d.user_has_liked ? d.likes_count - 1 : d.likes_count + 1,
+          user_has_liked: !d.user_has_liked,
+        };
+      }
+      return d;
+    });
+
+    // Atualiza o estado imediatamente
+    setDiscussions(updatedDiscussions);
+
     try {
+      // Faz a requisição ao servidor em background
       await toggleDiscussionLike(discussionId, currentUser.id);
-      refreshDiscussions();
-      toast({
-        description: "Ação realizada com sucesso!",
-      });
     } catch (error) {
       console.error("Erro ao curtir/descurtir:", error);
+      // Reverte a atualização otimista em caso de erro
+      setDiscussions(discussions);
       toast({
         variant: "destructive",
         description: "Erro ao processar sua ação.",
       });
-    } finally {
-      setIsLiking(false);
     }
   };
 
@@ -144,17 +160,46 @@ export default function Community() {
   const submitComment = async (discussionId) => {
     if (!commentText.trim()) return;
 
+    // Encontra a discussão atual
+    const discussion = discussions.find((d) => d.id === discussionId);
+    if (!discussion) return;
+
+    // Cria um comentário temporário
+    const tempComment = {
+      id: "temp-" + Date.now(),
+      content: commentText,
+      created_at: new Date().toISOString(),
+      user_id: currentUser.id,
+      user_metadata: currentUser.user_metadata,
+    };
+
+    // Atualiza o estado localmente primeiro (otimista)
+    const updatedDiscussions = discussions.map((d) => {
+      if (d.id === discussionId) {
+        return {
+          ...d,
+          comments: [...(d.comments || []), tempComment],
+          comments_count: (d.comments_count || 0) + 1,
+        };
+      }
+      return d;
+    });
+
+    // Atualiza o estado imediatamente
+    setDiscussions(updatedDiscussions);
+
+    // Limpa o campo de comentário
+    setCommentText("");
+    setActiveDiscussion(null);
+    setIsCommenting(false);
+
     try {
+      // Faz a requisição ao servidor em background
       await addComment(discussionId, commentText, currentUser.id);
-      setCommentText("");
-      setActiveDiscussion(null);
-      setIsCommenting(false);
-      await refreshDiscussions();
-      toast({
-        description: "Comentário adicionado com sucesso!",
-      });
     } catch (error) {
       console.error("Erro ao adicionar comentário:", error);
+      // Reverte a atualização otimista em caso de erro
+      setDiscussions(discussions);
       toast({
         variant: "destructive",
         description: "Erro ao adicionar comentário.",
@@ -216,217 +261,218 @@ export default function Community() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50">
+    <div className="min-h-screen bg-background">
       <TopNav />
-      <Sidebar />
-      <main className="flex-1 overflow-hidden">
-        <ScrollArea className="h-full">
-          <div className="container mx-auto py-6 px-4 max-w-4xl">
-            <div className="space-y-6">
-              <div className="bg-white rounded-xl shadow-sm p-6 mb-8 border border-gray-100">
-                <div className="flex space-x-4">
-                  <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                    <DialogTrigger asChild>
-                      <div className="cursor-pointer">
-                        <Avatar className="h-10 w-10 ring-2 ring-white hover:ring-blue-400 transition-all">
-                          <AvatarImage
-                            src={
-                              currentUser?.user_metadata?.avatar_url ||
-                              getAvatarUrl(currentUser)
-                            }
-                            alt={getUserDisplayName(currentUser)}
-                            className="object-cover"
-                          />
-                          <AvatarFallback>
-                            {getInitials(getUserDisplayName(currentUser))}
-                          </AvatarFallback>
-                        </Avatar>
-                      </div>
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-[425px]">
-                      <DialogHeader>
-                        <DialogTitle>Escolha seu avatar</DialogTitle>
-                      </DialogHeader>
-                      <div className="grid grid-cols-2 gap-4 py-4">
-                        {AVATAR_STYLES.map((style) => (
-                          <button
-                            key={style.value}
-                            onClick={() => handleAvatarChange(style.value)}
-                            className="flex flex-col items-center p-4 hover:bg-gray-50 rounded-lg border-2 border-transparent hover:border-blue-200 transition-all"
-                          >
-                            <Avatar className="h-16 w-16 mb-2">
-                              <AvatarImage
-                                src={getAvatarUrl(currentUser, style.value)}
-                              />
-                            </Avatar>
-                            <span className="text-sm font-medium">
-                              {style.label}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-                  <div className="flex-1">
-                    <form onSubmit={handleQuickPost}>
-                      <RichTextEditor
-                        value={quickPost}
-                        onChange={(value) => setQuickPost(value)}
-                        placeholder="O que você está pensando?"
-                      />
-                      <div className="mt-4 flex justify-end">
-                        <Button
-                          type="submit"
-                          disabled={posting || !quickPost.trim()}
-                          className="bg-blue-600 hover:bg-blue-700 text-white"
-                        >
-                          {posting ? "Publicando..." : "Publicar"}
-                        </Button>
-                      </div>
-                    </form>
-                  </div>
-                </div>
-              </div>
-
-              {discussions.map((discussion) => (
-                <div
-                  key={discussion.id}
-                  className="bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 border border-gray-100"
-                >
-                  <div className="p-6">
-                    <div className="flex items-start space-x-4">
-                      <Avatar className="h-10 w-10 ring-2 ring-white">
-                        <AvatarImage
-                          src={
-                            discussion?.user_metadata?.avatar_url ||
-                            getAvatarUrl(discussion)
-                          }
-                          alt={getUserDisplayName(discussion)}
-                          className="object-cover"
-                        />
-                        <AvatarFallback>
-                          {getInitials(getUserDisplayName(discussion))}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center space-x-2">
-                          <p className="text-sm font-medium text-gray-900">
-                            {getUserDisplayName(discussion)}
-                          </p>
-                          <span className="text-sm text-gray-500">
-                            {formatDate(discussion.created_at)}
-                          </span>
-                        </div>
-                        <div
-                          className="mt-1 text-sm text-gray-700 break-words"
-                          dangerouslySetInnerHTML={{
-                            __html: discussion.content,
-                          }}
-                        />
-                        <div className="mt-4 flex items-center space-x-4">
-                          <button
-                            onClick={() => handleLike(discussion.id)}
-                            disabled={isLiking}
-                            className={`flex items-center space-x-1 ${
-                              discussion.user_has_liked
-                                ? "text-blue-600"
-                                : "text-gray-500 hover:text-blue-600"
-                            }`}
-                          >
-                            <ThumbsUp className="h-4 w-4" />
-                            <span className="text-xs">
-                              {discussion.likes_count || 0} Curtir
-                            </span>
-                          </button>
-                          <button
-                            onClick={() => handleComment(discussion.id)}
-                            className="flex items-center space-x-1 text-gray-500 hover:text-blue-600"
-                          >
-                            <MessageCircle className="h-4 w-4" />
-                            <span className="text-xs">
-                              {discussion.comments_count || 0} Comentar
-                            </span>
-                          </button>
-                          <button className="flex items-center space-x-1 text-gray-500 hover:text-blue-600">
-                            <Share2 className="h-4 w-4" />
-                            <span className="text-xs">Compartilhar</span>
-                          </button>
-                        </div>
-
-                        {activeDiscussion === discussion.id && isCommenting && (
-                          <div className="mt-4">
-                            <RichTextEditor
-                              value={commentText}
-                              onChange={(value) => setCommentText(value)}
-                              placeholder="Escreva seu comentário..."
+      <div className="flex">
+        <CommunitySidebar />
+        <main className="flex-1 p-6">
+          <ScrollArea className="h-full">
+            <div className="container mx-auto py-6 px-4 max-w-4xl">
+              <div className="space-y-6">
+                <div className="bg-white rounded-xl shadow-sm p-6 mb-8 border border-gray-100">
+                  <div className="flex space-x-4">
+                    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                      <DialogTrigger asChild>
+                        <div className="cursor-pointer">
+                          <Avatar className="h-10 w-10 ring-2 ring-white hover:ring-blue-400 transition-all">
+                            <AvatarImage
+                              src={
+                                currentUser?.user_metadata?.avatar_url ||
+                                getAvatarUrl(currentUser)
+                              }
+                              alt={getUserDisplayName(currentUser)}
+                              className="object-cover"
                             />
-                            <div className="mt-2 flex justify-end space-x-2">
-                              <Button
-                                variant="outline"
-                                onClick={() => {
-                                  setActiveDiscussion(null);
-                                  setIsCommenting(false);
-                                  setCommentText("");
-                                }}
-                              >
-                                Cancelar
-                              </Button>
-                              <Button
-                                onClick={() => submitComment(discussion.id)}
-                                disabled={!commentText.trim()}
-                              >
-                                Comentar
-                              </Button>
-                            </div>
-                          </div>
-                        )}
-
-                        {discussion.comments?.length > 0 && (
-                          <div className="mt-4 space-y-4">
-                            <Separator />
-                            {discussion.comments.map((comment) => (
-                              <div key={comment.id} className="flex space-x-3">
-                                <Avatar className="h-8 w-8">
-                                  <AvatarImage
-                                    src={
-                                      comment?.user_metadata?.avatar_url ||
-                                      getAvatarUrl(comment)
-                                    }
-                                    alt={getUserDisplayName(comment)}
-                                  />
-                                  <AvatarFallback>
-                                    {getInitials(getUserDisplayName(comment))}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <div className="flex-1">
-                                  <div className="flex items-center space-x-2">
-                                    <p className="text-sm font-medium">
-                                      {getUserDisplayName(comment)}
-                                    </p>
-                                    <span className="text-xs text-gray-500">
-                                      {formatDate(comment.created_at)}
-                                    </span>
-                                  </div>
-                                  <div
-                                    className="text-sm text-gray-700"
-                                    dangerouslySetInnerHTML={{
-                                      __html: comment.content,
-                                    }}
-                                  />
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
+                            <AvatarFallback>
+                              {getInitials(getUserDisplayName(currentUser))}
+                            </AvatarFallback>
+                          </Avatar>
+                        </div>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-[425px]">
+                        <DialogHeader>
+                          <DialogTitle>Escolha seu avatar</DialogTitle>
+                        </DialogHeader>
+                        <div className="grid grid-cols-2 gap-4 py-4">
+                          {AVATAR_STYLES.map((style) => (
+                            <button
+                              key={style.value}
+                              onClick={() => handleAvatarChange(style.value)}
+                              className="flex flex-col items-center p-4 hover:bg-gray-50 rounded-lg border-2 border-transparent hover:border-blue-200 transition-all"
+                            >
+                              <Avatar className="h-16 w-16 mb-2">
+                                <AvatarImage
+                                  src={getAvatarUrl(currentUser, style.value)}
+                                />
+                              </Avatar>
+                              <span className="text-sm font-medium">
+                                {style.label}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                    <div className="flex-1">
+                      <form onSubmit={handleQuickPost}>
+                        <RichTextEditor
+                          value={quickPost}
+                          onChange={(value) => setQuickPost(value)}
+                          placeholder="O que você está pensando?"
+                        />
+                        <div className="mt-4 flex justify-end">
+                          <Button
+                            type="submit"
+                            disabled={posting || !quickPost.trim()}
+                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                          >
+                            {posting ? "Publicando..." : "Publicar"}
+                          </Button>
+                        </div>
+                      </form>
                     </div>
                   </div>
                 </div>
-              ))}
+
+                {discussions.map((discussion) => (
+                  <div
+                    key={discussion.id}
+                    className="bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 border border-gray-100"
+                  >
+                    <div className="p-6">
+                      <div className="flex items-start space-x-4">
+                        <Avatar className="h-10 w-10 ring-2 ring-white">
+                          <AvatarImage
+                            src={
+                              discussion?.user_metadata?.avatar_url ||
+                              getAvatarUrl(discussion)
+                            }
+                            alt={getUserDisplayName(discussion)}
+                          />
+                          <AvatarFallback>
+                            {getInitials(getUserDisplayName(discussion))}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center space-x-2">
+                            <p className="text-sm font-medium text-gray-900">
+                              {getUserDisplayName(discussion)}
+                            </p>
+                            <span className="text-sm text-gray-500">
+                              {formatDate(discussion.created_at)}
+                            </span>
+                          </div>
+                          <div
+                            className="mt-1 text-sm text-gray-700 break-words"
+                            dangerouslySetInnerHTML={{
+                              __html: discussion.content,
+                            }}
+                          />
+                          <div className="mt-4 flex items-center space-x-4">
+                            <button
+                              onClick={() => handleLike(discussion.id)}
+                              disabled={isLiking}
+                              className={`flex items-center space-x-1 ${
+                                discussion.user_has_liked
+                                  ? "text-blue-600"
+                                  : "text-gray-500 hover:text-blue-600"
+                              }`}
+                            >
+                              <ThumbsUp className="h-4 w-4" />
+                              <span className="text-xs">
+                                {discussion.likes_count || 0} Curtir
+                              </span>
+                            </button>
+                            <button
+                              onClick={() => handleComment(discussion.id)}
+                              className="flex items-center space-x-1 text-gray-500 hover:text-blue-600"
+                            >
+                              <MessageCircle className="h-4 w-4" />
+                              <span className="text-xs">
+                                {discussion.comments_count || 0} Comentar
+                              </span>
+                            </button>
+                            <button className="flex items-center space-x-1 text-gray-500 hover:text-blue-600">
+                              <Share2 className="h-4 w-4" />
+                              <span className="text-xs">Compartilhar</span>
+                            </button>
+                          </div>
+
+                          {activeDiscussion === discussion.id && isCommenting && (
+                            <div className="mt-4">
+                              <RichTextEditor
+                                value={commentText}
+                                onChange={(value) => setCommentText(value)}
+                                placeholder="Escreva seu comentário..."
+                              />
+                              <div className="mt-2 flex justify-end space-x-2">
+                                <Button
+                                  variant="outline"
+                                  onClick={() => {
+                                    setActiveDiscussion(null);
+                                    setIsCommenting(false);
+                                    setCommentText("");
+                                  }}
+                                >
+                                  Cancelar
+                                </Button>
+                                <Button
+                                  onClick={() => submitComment(discussion.id)}
+                                  disabled={!commentText.trim()}
+                                >
+                                  Comentar
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+
+                          {discussion.comments?.length > 0 && (
+                            <div className="mt-4 space-y-4">
+                              <Separator />
+                              {discussion.comments.map((comment) => (
+                                <div key={comment.id} className="flex space-x-3">
+                                  <Avatar className="h-8 w-8">
+                                    <AvatarImage
+                                      src={
+                                        comment?.user_metadata?.avatar_url ||
+                                        getAvatarUrl(comment)
+                                      }
+                                      alt={getUserDisplayName(comment)}
+                                    />
+                                    <AvatarFallback>
+                                      {getInitials(getUserDisplayName(comment))}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div className="flex-1">
+                                    <div className="flex items-center space-x-2">
+                                      <p className="text-sm font-medium">
+                                        {getUserDisplayName(comment)}
+                                      </p>
+                                      <span className="text-xs text-gray-500">
+                                        {formatDate(comment.created_at)}
+                                      </span>
+                                    </div>
+                                    <div
+                                      className="text-sm text-gray-700"
+                                      dangerouslySetInnerHTML={{
+                                        __html: comment.content,
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        </ScrollArea>
-      </main>
+          </ScrollArea>
+        </main>
+      </div>
     </div>
   );
 }

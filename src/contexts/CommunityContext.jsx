@@ -28,6 +28,7 @@ export function CommunityProvider({ children }) {
 
   const value = {
     discussions,
+    setDiscussions,
     loading,
     refreshDiscussions: fetchDiscussions,
   };
