@@ -43,11 +43,11 @@ const menuItems = [
 
 const CommunitySidebar = () => {
   return (
-    <div className="h-screen w-64 border-r bg-background">
+    <div className="h-screen w-64 border-r border-border bg-background">
       <ScrollArea className="h-full px-4 py-6">
         <div className="space-y-4">
           <div className="px-3">
-            <h2 className="mb-2 text-lg font-semibold">Comunidade</h2>
+            <h2 className="mb-2 text-lg font-semibold text-foreground">Comunidade</h2>
             <p className="text-sm text-muted-foreground">
               Conecte-se e aprenda com outros estudantes
             </p>
@@ -61,7 +61,7 @@ const CommunitySidebar = () => {
                   className="w-full justify-start gap-2"
                 >
                   <item.icon className="h-4 w-4" />
-                  {item.label}
+                  <span className="text-foreground">{item.label}</span>
                 </Button>
               </Link>
             ))}
@@ -70,11 +70,11 @@ const CommunitySidebar = () => {
           <div className="space-y-2">
             <Button variant="ghost" className="w-full justify-start gap-2">
               <Settings className="h-4 w-4" />
-              Configurações
+              <span className="text-foreground">Configurações</span>
             </Button>
             <Button variant="ghost" className="w-full justify-start gap-2">
               <HelpCircle className="h-4 w-4" />
-              Ajuda
+              <span className="text-foreground">Ajuda</span>
             </Button>
           </div>
         </div>

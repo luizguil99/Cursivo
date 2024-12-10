@@ -269,7 +269,7 @@ export default function Community() {
           <ScrollArea className="h-full">
             <div className="container mx-auto py-6 px-4 max-w-4xl">
               <div className="space-y-6">
-                <div className="bg-white rounded-xl shadow-sm p-6 mb-8 border border-gray-100">
+                <div className="bg-card rounded-xl shadow-sm p-6 mb-8 border border-border">
                   <div className="flex space-x-4">
                     <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
                       <DialogTrigger asChild>
@@ -337,7 +337,7 @@ export default function Community() {
                 {discussions.map((discussion) => (
                   <div
                     key={discussion.id}
-                    className="bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 border border-gray-100"
+                    className="bg-card rounded-xl shadow-sm hover:shadow-md transition-all duration-200 border border-border"
                   >
                     <div className="p-6">
                       <div className="flex items-start space-x-4">
@@ -355,15 +355,15 @@ export default function Community() {
                         </Avatar>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center space-x-2">
-                            <p className="text-sm font-medium text-gray-900">
+                            <p className="text-sm font-medium text-foreground">
                               {getUserDisplayName(discussion)}
                             </p>
-                            <span className="text-sm text-gray-500">
+                            <span className="text-sm text-muted-foreground">
                               {formatDate(discussion.created_at)}
                             </span>
                           </div>
                           <div
-                            className="mt-1 text-sm text-gray-700 break-words"
+                            className="mt-1 text-sm text-foreground break-words"
                             dangerouslySetInnerHTML={{
                               __html: discussion.content,
                             }}
@@ -398,39 +398,43 @@ export default function Community() {
                             </button>
                           </div>
 
-                          {activeDiscussion === discussion.id && isCommenting && (
-                            <div className="mt-4">
-                              <RichTextEditor
-                                value={commentText}
-                                onChange={(value) => setCommentText(value)}
-                                placeholder="Escreva seu comentário..."
-                              />
-                              <div className="mt-2 flex justify-end space-x-2">
-                                <Button
-                                  variant="outline"
-                                  onClick={() => {
-                                    setActiveDiscussion(null);
-                                    setIsCommenting(false);
-                                    setCommentText("");
-                                  }}
-                                >
-                                  Cancelar
-                                </Button>
-                                <Button
-                                  onClick={() => submitComment(discussion.id)}
-                                  disabled={!commentText.trim()}
-                                >
-                                  Comentar
-                                </Button>
+                          {activeDiscussion === discussion.id &&
+                            isCommenting && (
+                              <div className="mt-4">
+                                <RichTextEditor
+                                  value={commentText}
+                                  onChange={(value) => setCommentText(value)}
+                                  placeholder="Escreva seu comentário..."
+                                />
+                                <div className="mt-2 flex justify-end space-x-2">
+                                  <Button
+                                    variant="outline"
+                                    onClick={() => {
+                                      setActiveDiscussion(null);
+                                      setIsCommenting(false);
+                                      setCommentText("");
+                                    }}
+                                  >
+                                    Cancelar
+                                  </Button>
+                                  <Button
+                                    onClick={() => submitComment(discussion.id)}
+                                    disabled={!commentText.trim()}
+                                  >
+                                    Comentar
+                                  </Button>
+                                </div>
                               </div>
-                            </div>
-                          )}
+                            )}
 
                           {discussion.comments?.length > 0 && (
                             <div className="mt-4 space-y-4">
                               <Separator />
                               {discussion.comments.map((comment) => (
-                                <div key={comment.id} className="flex space-x-3">
+                                <div
+                                  key={comment.id}
+                                  className="flex space-x-3"
+                                >
                                   <Avatar className="h-8 w-8">
                                     <AvatarImage
                                       src={
