@@ -22,6 +22,7 @@ import ResetPassword from "./pages/ResetPassword";
 import Community from "./pages/Community";
 import { CommunityProvider } from "@/contexts/CommunityContext";
 import DiscussionDetails from "./pages/DiscussionDetails"; // Assuming this component exists
+import FilterQuestions from "./components/filterquestions/FilterQuestions";
 
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>
@@ -103,6 +104,14 @@ createRoot(document.getElementById("root")).render(
                   element={
                     <PrivateRoute>
                       <Community />
+                    </PrivateRoute>
+                  }
+                />
+                <Route
+                  path="/filterquestions"
+                  element={
+                    <PrivateRoute>
+                      <FilterQuestions />
                     </PrivateRoute>
                   }
                 />

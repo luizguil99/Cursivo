@@ -1,5 +1,5 @@
 import React from "react";
-import { Routes as RouterRoutes, Route } from "react-router-dom";
+import { Routes as RouterRoutes, Route, Router } from "react-router-dom";
 import PlanExpired from "@/pages/PlanExpired";
 import AccessDenied from "@/pages/AccessDenied";
 import Courses from "@/pages/Courses";
@@ -14,6 +14,7 @@ import UpdatePassword from "@/pages/UpdatePassword";
 import SimulationHistory from "@/pages/SimulationHistory";
 import SimulationExam from "@/pages/SimulationExam";
 import Community from "@/pages/Community";
+import FilterQuestions from "./components/FilterQuestions";
 
 export default function Routes() {
   return (
@@ -23,6 +24,8 @@ export default function Routes() {
       <Route path="/access-denied" element={<AccessDenied />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/update-password" element={<UpdatePassword />} />
+
+      
 
       {/* Rotas de cursos */}
       <Route path="/" element={<Courses />} />
@@ -42,6 +45,11 @@ export default function Routes() {
 
       {/* Rota da comunidade */}
       <Route path="/community" element={<Community />} />
+
+     {/* Rota para filtro de questoes */}
+      <Route path="/filterquestions" element={<FilterQuestions />} />
+
+      
 
       {/* Rotas administrativas */}
       <Route path="/admin" element={<AdminDashboard />} />

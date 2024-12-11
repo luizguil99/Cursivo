@@ -13,6 +13,7 @@ import {
   Target,
   Lightbulb,
   Home,
+  ListTodo,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import CourseList from "./CourseList";
@@ -95,6 +96,11 @@ function Sidebar({ onCourseSelect, onScheduleClick }) {
       icon: <Lightbulb className="h-5 w-5" />,
       label: "Ferramentas",
       onClick: () => navigate("/tools"),
+    },
+    {
+      icon: <ListTodo className="h-5 w-5" />,
+      label: "Filtro de Questões",
+      onClick: () => navigate("/filterquestions"),
     },
   ];
 
