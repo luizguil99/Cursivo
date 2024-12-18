@@ -28,6 +28,17 @@ const VimeoPlayer = ({ videoId, onVideoEnd, lessonId }) => {
           dnt: true,
           playsinline: true,
           autopause: false,
+          // Personalizando os controles
+          background: false, // Remove o botão de background
+          pip: false, // Remove o botão de Picture-in-Picture
+          portrait: false, // Remove o avatar do usuário Vimeo
+          title: false, // Remove o título do vídeo
+          byline: false, // Remove o nome do autor
+          speed: true, // Mantém o controle de velocidade
+          quality: true, // Mantém o controle de qualidade
+          collections: false, // Remove o botão de coleções
+          share: false, // Remove o botão de compartilhar
+          color: "F97316", // Cor laranja para os controles (hex sem #)
         });
 
         // Aguarda o player estar pronto

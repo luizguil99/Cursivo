@@ -78,49 +78,53 @@ function ModulesSidebar({ course, onSelectLesson }) {
 
   useEffect(() => {
     const fetchCompletedLessons = async () => {
-      console.log('=== DEBUG DO USUÁRIO NO MODULESSIDEBAR ===');
-      console.log('currentUser:', currentUser);
+      console.log("=== DEBUG DO USUÁRIO NO MODULESSIDEBAR ===");
+      console.log("currentUser:", currentUser);
       if (currentUser) {
-        console.log('ID:', currentUser.id);
-        console.log('Email:', currentUser.email);
+        console.log("ID:", currentUser.id);
+        console.log("Email:", currentUser.email);
       } else {
-        console.log('Nenhum usuário logado no ModulesSidebar');
+        console.log("Nenhum usuário logado no ModulesSidebar");
       }
-      console.log('=====================================');
+      console.log("=====================================");
 
       if (!currentUser) return;
 
       try {
-        console.log('=== BUSCANDO AULAS CONCLUÍDAS ===');
-        console.log('Usuário ID:', currentUser.id);
+        console.log("=== BUSCANDO AULAS CONCLUÍDAS ===");
+        console.log("Usuário ID:", currentUser.id);
 
         const { data, error } = await supabase
           .from("aulas_concluidas")
-          .select(`
+          .select(
+            `
             videoaula_id,
             videoaulas (
               id,
               titulo
             )
-          `)
+          `
+          )
           .eq("usuario_id", currentUser.id);
 
         if (error) {
-          console.error('Erro ao buscar aulas concluídas:', error.message);
+          console.error("Erro ao buscar aulas concluídas:", error.message);
           throw error;
         }
 
-        console.log('=== AULAS CONCLUÍDAS ENCONTRADAS ===');
-        data.forEach(item => {
+        console.log("=== AULAS CONCLUÍDAS ENCONTRADAS ===");
+        data.forEach((item) => {
           console.log(`- Aula ID: ${item.videoaula_id}`);
-          console.log(`  Título: ${item.videoaulas?.titulo || 'Título não encontrado'}`);
-          console.log('-----------------------------------');
+          console.log(
+            `  Título: ${item.videoaulas?.titulo || "Título não encontrado"}`
+          );
+          console.log("-----------------------------------");
         });
 
-        console.log('Aulas concluídas encontradas:', data);
-        const completedIds = data.map(item => item.videoaula_id);
-        console.log('IDs das aulas concluídas:', completedIds);
-        
+        console.log("Aulas concluídas encontradas:", data);
+        const completedIds = data.map((item) => item.videoaula_id);
+        console.log("IDs das aulas concluídas:", completedIds);
+
         setCompletedLessons(completedIds);
       } catch (error) {
         console.error("Erro ao buscar aulas concluídas:", error);
