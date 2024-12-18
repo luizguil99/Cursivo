@@ -17,7 +17,7 @@ const ModuleTitleSkeleton = () => (
   <span className="animate-pulse bg-gray-300 rounded h-4 w-24 inline-block"></span>
 );
 
-function ModulesSidebar({ course, onSelectLesson }) {
+function ModulesSidebar({ course, onSelectLesson, currentUser }) {
   const navigate = useNavigate();
   const [showPractice, setShowPractice] = useState(false);
   const [selectedTopic, setSelectedTopic] = useState(null);
@@ -25,6 +25,7 @@ function ModulesSidebar({ course, onSelectLesson }) {
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentCourse, setCurrentCourse] = useState(course);
+  const [completedLessons, setCompletedLessons] = useState([]);
 
   useEffect(() => {
     setCurrentCourse(course);
@@ -73,6 +74,27 @@ function ModulesSidebar({ course, onSelectLesson }) {
     fetchModulesAndLessons();
   }, [course?.id]);
 
+  useEffect(() => {
+    const fetchCompletedLessons = async () => {
+      if (!currentUser) return;
+
+      try {
+        const { data, error } = await supabase
+          .from("aulas_concluidas")
+          .select("videoaula_id")
+          .eq("usuario_id", currentUser.id);
+
+        if (error) throw error;
+
+        setCompletedLessons(data.map(item => item.videoaula_id));
+      } catch (error) {
+        console.error("Erro ao buscar aulas concluídas:", error);
+      }
+    };
+
+    fetchCompletedLessons();
+  }, [currentUser]);
+
   // Organizar vídeos por módulo e ordenar por ordem
   const videosByModule = modules.reduce((acc, module) => {
     acc[module.id] = videos
@@ -80,6 +102,11 @@ function ModulesSidebar({ course, onSelectLesson }) {
       .sort((a, b) => (a.ordem_indice || 0) - (b.ordem_indice || 0));
     return acc;
   }, {});
+
+  // Função para verificar se uma aula foi concluída
+  const isLessonCompleted = (videoId) => {
+    return completedLessons.includes(videoId);
+  };
 
   const handleLessonSelect = (video, module) => {
     onSelectLesson(video);
@@ -145,11 +172,17 @@ function ModulesSidebar({ course, onSelectLesson }) {
                           <Button
                             key={video.id}
                             variant="ghost"
-                            className="w-full justify-start gap-2 h-auto py-2 px-4 font-normal"
+                            className="w-full justify-start gap-2 h-auto py-2 px-4 font-normal relative"
                             onClick={() => handleLessonSelect(video, module)}
                           >
                             <PlayCircle className="h-4 w-4 shrink-0" />
                             <span className="truncate text-sm">{video.titulo}</span>
+                            {isLessonCompleted(video.id) && (
+                              <div 
+                                className="absolute right-2 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-[#F3C92C]"
+                                title="Aula concluída"
+                              />
+                            )}
                           </Button>
                         ))}
                       </div>

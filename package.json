@@ -40,6 +40,7 @@
     "@tiptap/react": "^2.10.3",
     "@tiptap/starter-kit": "^2.10.3",
     "@uiw/react-color": "^2.3.2",
+    "@vimeo/player": "^2.25.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
     "date-fns": "^4.1.0",

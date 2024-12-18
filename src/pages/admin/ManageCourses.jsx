@@ -192,6 +192,36 @@ export default function ManageCourses() {
     }
   };
 
+  const transformVideoUrl = (url) => {
+    if (!url) return '';
+
+    // Transformar URL do Vimeo em URL de embed
+    const vimeoMatch = url.match(/vimeo\.com\/(\d+)/);
+    if (vimeoMatch) {
+      return `https://player.vimeo.com/video/${vimeoMatch[1]}`;
+    }
+    
+    // Transformar URL do YouTube em URL de embed
+    const youtubeMatch = url.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/);
+    if (youtubeMatch) {
+      return `https://www.youtube.com/embed/${youtubeMatch[1]}`;
+    }
+    
+    return url;
+  };
+
+  const validateVideoUrl = (url) => {
+    if (!url) return false;
+    
+    // Validar URL do YouTube
+    const youtubeRegex = /^(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
+    
+    // Validar URL do Vimeo
+    const vimeoRegex = /^(?:https?:\/\/)?(?:www\.|player\.)?vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/(?:[^\/]*)\/videos\/|video\/|)(\d+)(?:|\/\?)/;
+    
+    return youtubeRegex.test(url) || vimeoRegex.test(url);
+  };
+
   const handleAddCourse = async (e) => {
     e.preventDefault();
     try {
@@ -266,8 +296,19 @@ export default function ManageCourses() {
 
   const handleAddVideo = async (e) => {
     e.preventDefault();
+    
+    if (!validateVideoUrl(newVideo.videoUrl)) {
+      toast({
+        title: "URL inválida",
+        description: "Por favor, insira uma URL válida do YouTube ou Vimeo (ex: https://vimeo.com/123456789 ou https://youtube.com/watch?v=abcdef)",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       const validResources = resources.filter((r) => r.name && r.url);
+      const transformedUrl = transformVideoUrl(newVideo.videoUrl);
 
       const { data, error } = await supabase
         .from("videoaulas")
@@ -275,7 +316,7 @@ export default function ManageCourses() {
           {
             titulo: newVideo.title,
             descricao: newVideo.description,
-            url_video: newVideo.videoUrl,
+            url_video: transformedUrl,
             curso_id: selectedCourse,
             modulo_id: selectedModule,
             recursos: validResources,
@@ -290,6 +331,11 @@ export default function ManageCourses() {
       setNewVideo({ title: "", description: "", videoUrl: "" });
       setResources([{ name: "", url: "" }]);
       fetchCourses();
+      
+      toast({
+        title: "Vídeo adicionado",
+        description: "O vídeo foi adicionado com sucesso!",
+      });
     } catch (error) {
       console.error("Erro ao adicionar vídeo:", error);
       toast({
@@ -443,7 +489,6 @@ export default function ManageCourses() {
     e.preventDefault();
 
     if (!editingVideo?.id) {
-      console.error('No video ID found for editing', editingVideo);
       toast({
         title: "Erro ao atualizar aula",
         description: "Dados da aula inválidos",
@@ -452,14 +497,19 @@ export default function ManageCourses() {
       return;
     }
 
-    console.log('Editing video:', editingVideo); // Debug log
+    if (!validateVideoUrl(editingVideo.url_video)) {
+      toast({
+        title: "URL inválida",
+        description: "Por favor, insira uma URL válida do YouTube ou Vimeo (ex: https://vimeo.com/123456789 ou https://youtube.com/watch?v=abcdef)",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setLoading(true);
     try {
-      const validResources =
-        editingVideo.recursos?.filter((r) => r.name && r.url) || [];
-
-      console.log('Valid resources:', validResources); // Debug log
+      const validResources = editingVideo.recursos?.filter((r) => r.name && r.url) || [];
+      const transformedUrl = transformVideoUrl(editingVideo.url_video);
 
       const { data, error } = await supabase
         .from("videoaulas")
@@ -468,25 +518,19 @@ export default function ManageCourses() {
           descricao: editingVideo.descricao || "",
           recursos: validResources,
           atualizado_em: new Date().toISOString(),
-          url_video: editingVideo.url_video || "",
+          url_video: transformedUrl,
         })
         .eq("id", editingVideo.id)
         .select();
 
-      console.log('Supabase update result:', { data, error }); // Debug log
-
       if (error) throw error;
 
-      // Atualizar o estado local
       setVideos((prev) => {
         const moduleId = Object.keys(prev).find((key) =>
           prev[key].some((video) => video.id === editingVideo.id)
         );
 
-        if (!moduleId) {
-          console.error("Módulo não encontrado para o vídeo:", editingVideo.id);
-          return prev;
-        }
+        if (!moduleId) return prev;
 
         return {
           ...prev,
@@ -496,7 +540,7 @@ export default function ManageCourses() {
                   ...video,
                   titulo: editingVideo.titulo || "",
                   descricao: editingVideo.descricao || "",
-                  url_video: editingVideo.url_video || "",
+                  url_video: transformedUrl,
                   recursos: validResources,
                 }
               : video
@@ -512,7 +556,7 @@ export default function ManageCourses() {
       setIsEditVideoDialogOpen(false);
       setEditingVideo(null);
     } catch (error) {
-      console.error("Erro detalhado ao atualizar aula:", error);
+      console.error("Erro ao atualizar aula:", error);
       toast({
         title: "Erro ao atualizar aula",
         description: error.message,

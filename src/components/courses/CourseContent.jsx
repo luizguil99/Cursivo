@@ -1,12 +1,37 @@
-import React from "react";
+import React, { useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { PlayCircle, Download, BookOpen, Brain, Trophy } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import FloatingChatButton from "./FloatingChatButton";
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/contexts/AuthContext";
 
-function CourseContent({ lesson }) {
+function CourseContent({ lesson, onLessonComplete }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { currentUser } = useAuth();
+
+  const handleVideoEnd = useCallback(async () => {
+    if (!currentUser || !lesson) return;
+
+    try {
+      // Salvar o progresso no banco de dados
+      const { error } = await supabase.from("aulas_concluidas").upsert({
+        usuario_id: currentUser.id,
+        videoaula_id: lesson.id,
+        concluido_em: new Date().toISOString(),
+      });
+
+      if (error) throw error;
+
+      // Notificar o componente pai que a aula foi concluída
+      if (onLessonComplete) {
+        onLessonComplete(lesson.id);
+      }
+    } catch (error) {
+      console.error("Erro ao salvar progresso:", error);
+    }
+  }, [currentUser, lesson, onLessonComplete]);
 
   // Se não houver lição ou se showExplore for true, mostra a página de exploração
   if (!lesson || location.state?.showExplore) {
@@ -171,26 +196,53 @@ function CourseContent({ lesson }) {
     );
   }
 
-  // Função para converter URL do YouTube em URL de embed
-  const getYouTubeEmbedUrl = (url) => {
+  // Função para converter URLs de vídeo em URLs de embed
+  const getVideoEmbedUrl = (url) => {
     if (!url) return "";
 
-    // Se já for uma URL de embed, retorna ela mesma
-    if (url.includes("youtube.com/embed/")) {
-      return url;
+    // Parâmetros do Vimeo para remover todos os controles
+    const vimeoParams = [
+      "title=0", // Remove o título
+      "byline=0", // Remove o nome do autor
+      "portrait=0", // Remove a foto do perfil
+      "sidedock=0", // Remove os ícones laterais
+      "controls=1", // Mantém os controles básicos
+      "background=0", // Desativa o modo background para manter os controles
+      "share=0", // Remove botão de compartilhar
+      "like=0", // Remove botão de like
+      "watch_later=0", // Remove botão de assistir depois
+      "playsinline=1", // Garante que o vídeo toque inline
+      "transparent=0", // Remove transparência
+      "autopause=0", // Desativa o autopause
+      "dnt=1", // Ativa o modo "Do Not Track"
+    ].join("&");
+
+    // Se já for uma URL de embed do Vimeo
+    if (url.includes("player.vimeo.com")) {
+      const hasParams = url.includes("?");
+      const connector = hasParams ? "&" : "?";
+      return `${url}${connector}${vimeoParams}`;
     }
 
-    // Extrair o ID do vídeo da URL do YouTube
-    const videoId = url.match(
-      /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|v\/|embed\/))([^&?]+)/
-    )?.[1];
+    // Vimeo
+    const vimeoMatch = url.match(/vimeo\.com\/(\d+)/);
+    if (vimeoMatch) {
+      return `https://player.vimeo.com/video/${vimeoMatch[1]}?${vimeoParams}`;
+    }
 
-    if (!videoId) return url;
-    return `https://www.youtube.com/embed/${videoId}`;
+    // YouTube
+    const youtubeMatch = url.match(
+      /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|v\/|embed\/))([^&?]+)/
+    );
+    if (youtubeMatch) {
+      return `https://www.youtube.com/embed/${youtubeMatch[1]}`;
+    }
+
+    return url;
   };
 
   // Converter a URL do vídeo para URL de embed
-  const embedUrl = getYouTubeEmbedUrl(lesson.videoUrl);
+  const embedUrl = getVideoEmbedUrl(lesson.videoUrl);
   console.log("Dados da aula:", {
     title: lesson.title,
     description: lesson.description,
@@ -219,6 +271,10 @@ function CourseContent({ lesson }) {
                 title={lesson.title}
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
+                referrerPolicy="origin"
+                loading="lazy"
+                sandbox="allow-scripts allow-same-origin allow-presentation"
+                onEnded={handleVideoEnd}
               />
             </div>
           </div>

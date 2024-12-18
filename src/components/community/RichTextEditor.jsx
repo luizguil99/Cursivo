@@ -144,24 +144,36 @@ const MenuBar = ({ editor }) => {
             label="Refazer"
           />
 
-          <Popover open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
-            <PopoverTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-foreground hover:bg-accent hover:text-foreground"
-              >
-                <Smile className="h-4 w-4" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-full p-0" align="start">
-              <EmojiPicker
-                onEmojiClick={onEmojiClick}
-                theme="auto"
-                width="100%"
-              />
-            </PopoverContent>
-          </Popover>
+          <TooltipProvider>
+            <Tooltip delayDuration={300}>
+              <Popover open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
+                <TooltipTrigger asChild>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={cn(
+                        "text-foreground hover:bg-accent hover:text-foreground",
+                        showEmojiPicker && "bg-accent"
+                      )}
+                    >
+                      <Smile className="h-4 w-4" />
+                    </Button>
+                  </PopoverTrigger>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="font-medium">
+                  <p>Emoji</p>
+                </TooltipContent>
+                <PopoverContent className="w-full p-0" align="start">
+                  <EmojiPicker
+                    onEmojiClick={onEmojiClick}
+                    theme="auto"
+                    width="100%"
+                  />
+                </PopoverContent>
+              </Popover>
+            </Tooltip>
+          </TooltipProvider>
         </TooltipProvider>
       </div>
     </div>
