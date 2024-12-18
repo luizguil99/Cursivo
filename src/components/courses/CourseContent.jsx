@@ -1,37 +1,118 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { PlayCircle, Download, BookOpen, Brain, Trophy } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import FloatingChatButton from "./FloatingChatButton";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
+import VimeoPlayer from "./VimeoPlayer";
 
 function CourseContent({ lesson, onLessonComplete }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { currentUser } = useAuth();
 
+  // Debug do usuário
+  useEffect(() => {
+    console.log("=== DEBUG DO USUÁRIO ===");
+    console.log("currentUser:", currentUser);
+    if (currentUser) {
+      console.log("ID:", currentUser.id);
+      console.log("Email:", currentUser.email);
+    } else {
+      console.log("Nenhum usuário logado");
+    }
+    console.log("=====================");
+  }, [currentUser]);
+
+  const [isCompleted, setIsCompleted] = useState(false);
+
+  // Verifica se a aula já foi concluída
+  useEffect(() => {
+    const checkLessonCompletion = async () => {
+      if (!currentUser?.id || !lesson?.id) return;
+
+      try {
+        const { data, error } = await supabase
+          .from("aulas_concluidas")
+          .select("concluido_em")
+          .eq("usuario_id", currentUser.id)
+          .eq("videoaula_id", lesson.id);
+
+        if (error) {
+          console.error("Erro ao verificar conclusão:", error);
+          return;
+        }
+
+        // Se encontrou algum registro, a aula está concluída
+        setIsCompleted(data && data.length > 0);
+      } catch (error) {
+        console.error("Erro ao verificar conclusão:", error);
+      }
+    };
+
+    checkLessonCompletion();
+  }, [currentUser?.id, lesson?.id]);
+
   const handleVideoEnd = useCallback(async () => {
-    if (!currentUser || !lesson) return;
+    if (!currentUser?.id || !lesson?.id) {
+      console.log("Usuário não logado ou aula não encontrada");
+      return;
+    }
 
     try {
-      // Salvar o progresso no banco de dados
-      const { error } = await supabase.from("aulas_concluidas").upsert({
+      console.log("Verificando se a aula já foi concluída:", {
         usuario_id: currentUser.id,
         videoaula_id: lesson.id,
-        concluido_em: new Date().toISOString(),
       });
 
-      if (error) throw error;
+      // Primeiro, verifica se já existe um registro
+      const { data: existingData, error: checkError } = await supabase
+        .from("aulas_concluidas")
+        .select("*")
+        .eq("usuario_id", currentUser.id)
+        .eq("videoaula_id", lesson.id)
+        .single();
+
+      if (checkError && checkError.code !== 'PGRST116') {
+        console.error("Erro ao verificar aula concluída:", checkError);
+        return;
+      }
+
+      // Se já existe um registro, não precisa fazer nada
+      if (existingData) {
+        console.log("Aula já foi concluída anteriormente");
+        setIsCompleted(true);
+        return;
+      }
+
+      // Se não existe, insere um novo registro
+      console.log("Salvando nova conclusão de aula");
+      const { error: insertError } = await supabase
+        .from("aulas_concluidas")
+        .insert({
+          usuario_id: currentUser.id,
+          videoaula_id: lesson.id,
+          concluido_em: new Date().toISOString(),
+        });
+
+      if (insertError) {
+        console.error("Erro ao salvar progresso:", insertError);
+        return;
+      }
+
+      console.log("Progresso salvo com sucesso!");
+      setIsCompleted(true);
 
       // Notificar o componente pai que a aula foi concluída
       if (onLessonComplete) {
+        console.log("Notificando componente pai sobre conclusão");
         onLessonComplete(lesson.id);
       }
     } catch (error) {
       console.error("Erro ao salvar progresso:", error);
     }
-  }, [currentUser, lesson, onLessonComplete]);
+  }, [currentUser?.id, lesson?.id, onLessonComplete]);
 
   // Se não houver lição ou se showExplore for true, mostra a página de exploração
   if (!lesson || location.state?.showExplore) {
@@ -202,19 +283,19 @@ function CourseContent({ lesson, onLessonComplete }) {
 
     // Parâmetros do Vimeo para remover todos os controles
     const vimeoParams = [
-      "title=0", // Remove o título
-      "byline=0", // Remove o nome do autor
-      "portrait=0", // Remove a foto do perfil
-      "sidedock=0", // Remove os ícones laterais
-      "controls=1", // Mantém os controles básicos
-      "background=0", // Desativa o modo background para manter os controles
-      "share=0", // Remove botão de compartilhar
-      "like=0", // Remove botão de like
-      "watch_later=0", // Remove botão de assistir depois
-      "playsinline=1", // Garante que o vídeo toque inline
-      "transparent=0", // Remove transparência
-      "autopause=0", // Desativa o autopause
-      "dnt=1", // Ativa o modo "Do Not Track"
+      "title=0",
+      "byline=0",
+      "portrait=0",
+      "sidedock=0",
+      "controls=1",
+      "background=0",
+      "share=0",
+      "like=0",
+      "watch_later=0",
+      "playsinline=1",
+      "transparent=0",
+      "autopause=0",
+      "dnt=1",
     ].join("&");
 
     // Se já for uma URL de embed do Vimeo
@@ -241,15 +322,22 @@ function CourseContent({ lesson, onLessonComplete }) {
     return url;
   };
 
-  // Converter a URL do vídeo para URL de embed
-  const embedUrl = getVideoEmbedUrl(lesson.videoUrl);
-  console.log("Dados da aula:", {
-    title: lesson.title,
-    description: lesson.description,
-    videoUrl: lesson.videoUrl,
-    embedUrl,
-    resources: lesson.resources,
-  });
+  // Verificar se é um vídeo do Vimeo e extrair o ID
+  const getVimeoId = (url) => {
+    if (!url) return null;
+    // Tentar extrair ID de URL normal do Vimeo
+    const vimeoMatch = url.match(/vimeo\.com\/(\d+)/);
+    if (vimeoMatch) return vimeoMatch[1];
+
+    // Tentar extrair ID de URL de embed do Vimeo
+    const vimeoEmbedMatch = url.match(/player\.vimeo\.com\/video\/(\d+)/);
+    if (vimeoEmbedMatch) return vimeoEmbedMatch[1];
+
+    return null;
+  };
+
+  const isVimeoVideo = lesson?.videoUrl?.includes("vimeo.com");
+  const vimeoId = isVimeoVideo ? getVimeoId(lesson.videoUrl) : null;
 
   return (
     <div className="h-full overflow-y-auto">
@@ -264,18 +352,26 @@ function CourseContent({ lesson, onLessonComplete }) {
             className="relative rounded-lg overflow-hidden bg-black w-full max-w-2xl mx-auto"
             style={{ boxShadow: "0 4px 20px rgba(243, 201, 44, 0.2)" }}
           >
-            <div className="aspect-video">
-              <iframe
-                className="absolute inset-0 w-full h-full"
-                src={embedUrl}
-                title={lesson.title}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-                referrerPolicy="origin"
-                loading="lazy"
-                sandbox="allow-scripts allow-same-origin allow-presentation"
-                onEnded={handleVideoEnd}
-              />
+            <div className="aspect-video relative">
+              {isVimeoVideo && vimeoId ? (
+                <VimeoPlayer
+                  videoId={vimeoId}
+                  onVideoEnd={() => handleVideoEnd()}
+                  lessonId={lesson.id}
+                />
+              ) : (
+                <iframe
+                  className="absolute inset-0 w-full h-full"
+                  src={getVideoEmbedUrl(lesson.videoUrl)}
+                  title={lesson.title}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  referrerPolicy="origin"
+                  loading="lazy"
+                  sandbox="allow-scripts allow-same-origin allow-presentation"
+                  onEnded={handleVideoEnd}
+                />
+              )}
             </div>
           </div>
 

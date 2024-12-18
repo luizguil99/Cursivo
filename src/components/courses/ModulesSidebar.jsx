@@ -11,13 +11,15 @@ import {
 } from "@/components/ui/accordion";
 import PracticeModal from "./PracticeModal";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/contexts/AuthContext";
 
 // Skeleton component for module titles
 const ModuleTitleSkeleton = () => (
   <span className="animate-pulse bg-gray-300 rounded h-4 w-24 inline-block"></span>
 );
 
-function ModulesSidebar({ course, onSelectLesson, currentUser }) {
+function ModulesSidebar({ course, onSelectLesson }) {
+  const { currentUser } = useAuth();
   const navigate = useNavigate();
   const [showPractice, setShowPractice] = useState(false);
   const [selectedTopic, setSelectedTopic] = useState(null);
@@ -76,17 +78,50 @@ function ModulesSidebar({ course, onSelectLesson, currentUser }) {
 
   useEffect(() => {
     const fetchCompletedLessons = async () => {
+      console.log('=== DEBUG DO USUÁRIO NO MODULESSIDEBAR ===');
+      console.log('currentUser:', currentUser);
+      if (currentUser) {
+        console.log('ID:', currentUser.id);
+        console.log('Email:', currentUser.email);
+      } else {
+        console.log('Nenhum usuário logado no ModulesSidebar');
+      }
+      console.log('=====================================');
+
       if (!currentUser) return;
 
       try {
+        console.log('=== BUSCANDO AULAS CONCLUÍDAS ===');
+        console.log('Usuário ID:', currentUser.id);
+
         const { data, error } = await supabase
           .from("aulas_concluidas")
-          .select("videoaula_id")
+          .select(`
+            videoaula_id,
+            videoaulas (
+              id,
+              titulo
+            )
+          `)
           .eq("usuario_id", currentUser.id);
 
-        if (error) throw error;
+        if (error) {
+          console.error('Erro ao buscar aulas concluídas:', error.message);
+          throw error;
+        }
 
-        setCompletedLessons(data.map(item => item.videoaula_id));
+        console.log('=== AULAS CONCLUÍDAS ENCONTRADAS ===');
+        data.forEach(item => {
+          console.log(`- Aula ID: ${item.videoaula_id}`);
+          console.log(`  Título: ${item.videoaulas?.titulo || 'Título não encontrado'}`);
+          console.log('-----------------------------------');
+        });
+
+        console.log('Aulas concluídas encontradas:', data);
+        const completedIds = data.map(item => item.videoaula_id);
+        console.log('IDs das aulas concluídas:', completedIds);
+        
+        setCompletedLessons(completedIds);
       } catch (error) {
         console.error("Erro ao buscar aulas concluídas:", error);
       }
@@ -164,7 +199,9 @@ function ModulesSidebar({ course, onSelectLesson, currentUser }) {
               : modules.map((module) => (
                   <AccordionItem key={module.id} value={module.id}>
                     <AccordionTrigger className="hover:bg-accent hover:no-underline px-4">
-                      <span className="text-sm font-medium">{module.titulo}</span>
+                      <span className="text-sm font-medium">
+                        {module.titulo}
+                      </span>
                     </AccordionTrigger>
                     <AccordionContent>
                       <div className="space-y-1 p-1">
@@ -176,9 +213,11 @@ function ModulesSidebar({ course, onSelectLesson, currentUser }) {
                             onClick={() => handleLessonSelect(video, module)}
                           >
                             <PlayCircle className="h-4 w-4 shrink-0" />
-                            <span className="truncate text-sm">{video.titulo}</span>
+                            <span className="truncate text-sm">
+                              {video.titulo}
+                            </span>
                             {isLessonCompleted(video.id) && (
-                              <div 
+                              <div
                                 className="absolute right-2 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-[#F3C92C]"
                                 title="Aula concluída"
                               />
