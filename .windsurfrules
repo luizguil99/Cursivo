@@ -1,6 +1,3 @@
-Local Dev / CLI
-CLI
-Getting started
 Supabase CLI
 Develop locally, deploy to the Supabase Platform, and set up CI/CD workflows
 The Supabase CLI enables you to run the entire Supabase stack locally, on your machine or in a CI environment. With just two commands, you can set up and start a new local project:
@@ -16,10 +13,17 @@ Windows
 Linux
 
 npm / Bun
-Install the CLI with Scoop:
+Run the CLI by prefixing each command with npx:
 
-scoop bucket add supabase https://github.com/supabase/scoop-bucket.git
-scoop install supabase
+npx supabase <command>
+
+Or with bunx:
+
+bunx supabase <command>
+
+You can also install the CLI as dev dependency via npm:
+
+npm install supabase --save-dev
 
 Updating the Supabase CLI#
 When a new version is released, you can update the CLI using the same methods.
@@ -32,7 +36,9 @@ Windows
 Linux
 
 npm / Bun
-scoop update supabase
+If you have installed the CLI as dev dependency via npm, you can update it with:
+
+npm update supabase --save-dev
 
 If you have any Supabase containers running locally, stop them and delete their data volumes before proceeding with the upgrade. This ensures that Supabase managed services can apply new migrations on a clean state of the local database.
 
@@ -92,11 +98,13 @@ API Gateway
 
 Analytics
 # Default URL:
-http://localhost:54323
+postgresql://postgres:postgres@localhost:54322/postgres
 
-The local development environment includes Supabase Studio, a graphical interface for working with your database.
+The local Postgres instance can be accessed through psql or any other Postgres client, such as pgadmin. For example:
 
-Local Studio
+psql 'postgresql://postgres:postgres@localhost:54322/postgres'
+
+To access the database from an edge function in your local Supabase setup, replace localhost with host.docker.internal.
 
 Stopping local services#
 When you are finished working on your Supabase project, you can stop the stack (without resetting your local database):
