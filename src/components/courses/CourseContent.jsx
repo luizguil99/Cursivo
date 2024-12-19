@@ -155,32 +155,8 @@ function CourseContent({ lesson, onLessonComplete }) {
                   </div>
                 </div>
 
-                {/* Cards de Estatísticas */}
-                <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
-                  {/* Card 1 */}
-                  <div className="group rounded-lg p-3 sm:p-4 border bg-card hover:border-primary/50 transition-all duration-300">
-                    <div className="flex items-center justify-between">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs sm:text-sm text-muted-foreground">
-                          Cursos em Andamento
-                        </p>
-                        <div className="flex items-baseline gap-2 mt-1">
-                          <p className="text-lg sm:text-2xl font-bold">4</p>
-                          <span className="text-xs text-green-500 truncate">
-                            +2 nesta semana
-                          </span>
-                        </div>
-                      </div>
-                      <div className="bg-primary/10 p-2 sm:p-3 rounded-lg group-hover:bg-primary/20 transition-colors ml-2">
-                        <BookOpen
-                          className="h-5 w-5 sm:h-6 sm:w-6 text-primary"
-                          aria-hidden="true"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Card 2 */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 mb-6">
+                  {/* Card 2 - Primeira coluna, primeira linha */}
                   <div className="group rounded-lg p-3 sm:p-4 border bg-card hover:border-primary/50 transition-all duration-300">
                     <div className="flex items-center justify-between">
                       <div className="min-w-0 flex-1">
@@ -203,30 +179,7 @@ function CourseContent({ lesson, onLessonComplete }) {
                     </div>
                   </div>
 
-                  {/* Card 3 */}
-                  <div className="group rounded-lg p-3 sm:p-4 border bg-card hover:border-primary/50 transition-all duration-300">
-                    <div className="flex items-center justify-between">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs sm:text-sm text-muted-foreground">
-                          Horas Estudadas
-                        </p>
-                        <div className="flex items-baseline gap-2 mt-1">
-                          <p className="text-lg sm:text-2xl font-bold">12h</p>
-                          <span className="text-xs text-green-500 truncate">
-                            +3h hoje
-                          </span>
-                        </div>
-                      </div>
-                      <div className="bg-primary/10 p-2 sm:p-3 rounded-lg group-hover:bg-primary/20 transition-colors ml-2">
-                        <Clock
-                          className="h-5 w-5 sm:h-6 sm:w-6 text-primary"
-                          aria-hidden="true"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Card 4 */}
+                  {/* Card 4 - Segunda coluna, primeira linha */}
                   <div className="group rounded-lg p-3 sm:p-4 border bg-card hover:border-primary/50 transition-all duration-300">
                     <div className="flex items-center justify-between">
                       <div className="min-w-0 flex-1">
@@ -248,8 +201,53 @@ function CourseContent({ lesson, onLessonComplete }) {
                       </div>
                     </div>
                   </div>
-                </div>
 
+                  {/* Card 1 - Primeira coluna, segunda linha */}
+                  <div className="group rounded-lg p-3 sm:p-4 border bg-card hover:border-primary/50 transition-all duration-300">
+                    <div className="flex items-center justify-between">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs sm:text-sm text-muted-foreground">
+                          Cursos em Andamento
+                        </p>
+                        <div className="flex items-baseline gap-2 mt-1">
+                          <p className="text-lg sm:text-2xl font-bold">4</p>
+                          <span className="text-xs text-green-500 truncate">
+                            +2 nesta semana
+                          </span>
+                        </div>
+                      </div>
+                      <div className="bg-primary/10 p-2 sm:p-3 rounded-lg group-hover:bg-primary/20 transition-colors ml-2">
+                        <BookOpen
+                          className="h-5 w-5 sm:h-6 sm:w-6 text-primary"
+                          aria-hidden="true"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card 3 - Segunda coluna, segunda linha */}
+                  <div className="group rounded-lg p-3 sm:p-4 border bg-card hover:border-primary/50 transition-all duration-300">
+                    <div className="flex items-center justify-between">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs sm:text-sm text-muted-foreground">
+                          Horas Estudadas
+                        </p>
+                        <div className="flex items-baseline gap-2 mt-1">
+                          <p className="text-lg sm:text-2xl font-bold">12h</p>
+                          <span className="text-xs text-green-500 truncate">
+                            +3h hoje
+                          </span>
+                        </div>
+                      </div>
+                      <div className="bg-primary/10 p-2 sm:p-3 rounded-lg group-hover:bg-primary/20 transition-colors ml-2">
+                        <Clock
+                          className="h-5 w-5 sm:h-6 sm:w-6 text-primary"
+                          aria-hidden="true"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
                 {/* Último Curso */}
                 <div className="rounded-lg p-4 sm:p-6 mb-6 border bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-background/60">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-2">
