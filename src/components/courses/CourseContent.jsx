@@ -42,7 +42,7 @@ function CourseContent({ lesson, onLessonComplete }) {
       setIsCompleted(false);
       setCurrentVideoId(lesson?.id);
     }
-  }, [lesson?.id]);
+  }, [lesson?.id, currentVideoId]);
 
   // Verifica se a aula já foi concluída
   useEffect(() => {
@@ -161,16 +161,21 @@ function CourseContent({ lesson, onLessonComplete }) {
                   <div className="group rounded-lg p-3 sm:p-4 border bg-card hover:border-primary/50 transition-all duration-300">
                     <div className="flex items-center justify-between">
                       <div className="min-w-0 flex-1">
-                        <p className="text-xs sm:text-sm text-muted-foreground truncate">
+                        <p className="text-xs sm:text-sm text-muted-foreground">
                           Cursos em Andamento
                         </p>
                         <div className="flex items-baseline gap-2 mt-1">
                           <p className="text-lg sm:text-2xl font-bold">4</p>
-                          <span className="text-xs text-green-500 truncate">+2 nesta semana</span>
+                          <span className="text-xs text-green-500 truncate">
+                            +2 nesta semana
+                          </span>
                         </div>
                       </div>
                       <div className="bg-primary/10 p-2 sm:p-3 rounded-lg group-hover:bg-primary/20 transition-colors ml-2">
-                        <BookOpen className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
+                        <BookOpen
+                          className="h-5 w-5 sm:h-6 sm:w-6 text-primary"
+                          aria-hidden="true"
+                        />
                       </div>
                     </div>
                   </div>
@@ -179,16 +184,21 @@ function CourseContent({ lesson, onLessonComplete }) {
                   <div className="group rounded-lg p-3 sm:p-4 border bg-card hover:border-primary/50 transition-all duration-300">
                     <div className="flex items-center justify-between">
                       <div className="min-w-0 flex-1">
-                        <p className="text-xs sm:text-sm text-muted-foreground truncate">
+                        <p className="text-xs sm:text-sm text-muted-foreground">
                           Exercícios Concluídos
                         </p>
                         <div className="flex items-baseline gap-2 mt-1">
                           <p className="text-lg sm:text-2xl font-bold">28</p>
-                          <span className="text-xs text-green-500 truncate">+5 hoje</span>
+                          <span className="text-xs text-green-500 truncate">
+                            +5 hoje
+                          </span>
                         </div>
                       </div>
                       <div className="bg-primary/10 p-2 sm:p-3 rounded-lg group-hover:bg-primary/20 transition-colors ml-2">
-                        <Brain className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
+                        <Brain
+                          className="h-5 w-5 sm:h-6 sm:w-6 text-primary"
+                          aria-hidden="true"
+                        />
                       </div>
                     </div>
                   </div>
@@ -197,16 +207,21 @@ function CourseContent({ lesson, onLessonComplete }) {
                   <div className="group rounded-lg p-3 sm:p-4 border bg-card hover:border-primary/50 transition-all duration-300">
                     <div className="flex items-center justify-between">
                       <div className="min-w-0 flex-1">
-                        <p className="text-xs sm:text-sm text-muted-foreground truncate">
+                        <p className="text-xs sm:text-sm text-muted-foreground">
                           Horas Estudadas
                         </p>
                         <div className="flex items-baseline gap-2 mt-1">
                           <p className="text-lg sm:text-2xl font-bold">12h</p>
-                          <span className="text-xs text-green-500 truncate">+3h hoje</span>
+                          <span className="text-xs text-green-500 truncate">
+                            +3h hoje
+                          </span>
                         </div>
                       </div>
                       <div className="bg-primary/10 p-2 sm:p-3 rounded-lg group-hover:bg-primary/20 transition-colors ml-2">
-                        <Clock className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
+                        <Clock
+                          className="h-5 w-5 sm:h-6 sm:w-6 text-primary"
+                          aria-hidden="true"
+                        />
                       </div>
                     </div>
                   </div>
@@ -215,16 +230,21 @@ function CourseContent({ lesson, onLessonComplete }) {
                   <div className="group rounded-lg p-3 sm:p-4 border bg-card hover:border-primary/50 transition-all duration-300">
                     <div className="flex items-center justify-between">
                       <div className="min-w-0 flex-1">
-                        <p className="text-xs sm:text-sm text-muted-foreground truncate">
+                        <p className="text-xs sm:text-sm text-muted-foreground">
                           Conquistas
                         </p>
                         <div className="flex items-baseline gap-2 mt-1">
                           <p className="text-lg sm:text-2xl font-bold">5</p>
-                          <span className="text-xs text-green-500 truncate">Nova!</span>
+                          <span className="text-xs text-green-500 truncate">
+                            Nova!
+                          </span>
                         </div>
                       </div>
                       <div className="bg-primary/10 p-2 sm:p-3 rounded-lg group-hover:bg-primary/20 transition-colors ml-2">
-                        <Trophy className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
+                        <Trophy
+                          className="h-5 w-5 sm:h-6 sm:w-6 text-primary"
+                          aria-hidden="true"
+                        />
                       </div>
                     </div>
                   </div>
@@ -233,19 +253,28 @@ function CourseContent({ lesson, onLessonComplete }) {
                 {/* Último Curso */}
                 <div className="rounded-lg p-4 sm:p-6 mb-6 border bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-background/60">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-2">
-                    <h3 className="text-base sm:text-lg font-semibold">Continue Estudando</h3>
+                    <h3 className="text-base sm:text-lg font-semibold">
+                      Continue Estudando
+                    </h3>
                     <span className="px-2 py-1 text-xs font-medium bg-primary/10 text-primary rounded-full w-fit">
                       Última atividade
                     </span>
                   </div>
                   <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                     <div className="w-14 h-14 sm:w-16 sm:h-16 bg-[#F3C92C] rounded-lg flex items-center justify-center shadow-lg shadow-[#F3C92C]/20 flex-shrink-0">
-                      <BookOpen className="h-7 w-7 sm:h-8 sm:w-8 text-background" />
+                      <BookOpen
+                        className="h-7 w-7 sm:h-8 sm:w-8 text-background"
+                        aria-hidden="true"
+                      />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2 mb-1">
-                        <h4 className="font-medium text-sm sm:text-base">História Medieval</h4>
-                        <span className="px-2 py-0.5 text-xs bg-muted rounded-full">Módulo 2</span>
+                        <h4 className="font-medium text-sm sm:text-base">
+                          História Medieval
+                        </h4>
+                        <span className="px-2 py-0.5 text-xs bg-muted rounded-full">
+                          Módulo 2
+                        </span>
                       </div>
                       <p className="text-xs sm:text-sm text-muted-foreground mb-2">
                         Sociedade Feudal
@@ -272,44 +301,71 @@ function CourseContent({ lesson, onLessonComplete }) {
                 {/* Próximas Atividades */}
                 <div>
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-base sm:text-lg font-semibold">Próximas Atividades</h3>
-                    <button className="text-xs sm:text-sm text-muted-foreground hover:text-primary transition-colors">
+                    <h3 className="text-base sm:text-lg font-semibold">
+                      Próximas Atividades
+                    </h3>
+                    <button
+                      type="button"
+                      className="text-xs sm:text-sm text-muted-foreground hover:text-primary transition-colors"
+                    >
                       Ver todas
                     </button>
                   </div>
                   <div className="space-y-3">
                     <div className="group flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3 sm:p-4 rounded-lg border bg-card hover:border-primary/50 transition-all duration-300">
                       <div className="bg-primary/10 p-2 sm:p-3 rounded-lg group-hover:bg-primary/20 transition-colors">
-                        <BookOpen className="h-5 w-5 text-primary" />
+                        <BookOpen
+                          className="h-5 w-5 text-primary"
+                          aria-hidden="true"
+                        />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-medium text-sm sm:text-base">Aula de Geografia</p>
-                          <span className="px-2 py-0.5 text-xs bg-primary/10 text-primary rounded-full">Novo</span>
+                          <p className="font-medium text-sm sm:text-base">
+                            Aula de Geografia
+                          </p>
+                          <span className="px-2 py-0.5 text-xs bg-primary/10 text-primary rounded-full">
+                            Novo
+                          </span>
                         </div>
                         <p className="text-xs sm:text-sm text-muted-foreground mt-1">
                           Clima e Vegetação
                         </p>
                       </div>
-                      <Button variant="outline" size="sm" className="w-full sm:w-auto mt-2 sm:mt-0">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full sm:w-auto mt-2 sm:mt-0"
+                      >
                         Iniciar
                       </Button>
                     </div>
 
                     <div className="group flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3 sm:p-4 rounded-lg border bg-card hover:border-primary/50 transition-all duration-300">
                       <div className="bg-primary/10 p-2 sm:p-3 rounded-lg group-hover:bg-primary/20 transition-colors">
-                        <Brain className="h-5 w-5 text-primary" />
+                        <Brain
+                          className="h-5 w-5 text-primary"
+                          aria-hidden="true"
+                        />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-medium text-sm sm:text-base">Exercício de Matemática</p>
-                          <span className="px-2 py-0.5 text-xs border border-primary/20 text-primary rounded-full">10 questões</span>
+                          <p className="font-medium text-sm sm:text-base">
+                            Exercício de Matemática
+                          </p>
+                          <span className="px-2 py-0.5 text-xs border border-primary/20 text-primary rounded-full">
+                            10 questões
+                          </span>
                         </div>
                         <p className="text-xs sm:text-sm text-muted-foreground mt-1">
                           Álgebra Linear
                         </p>
                       </div>
-                      <Button variant="outline" size="sm" className="w-full sm:w-auto mt-2 sm:mt-0">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full sm:w-auto mt-2 sm:mt-0"
+                      >
                         Resolver
                       </Button>
                     </div>
@@ -321,7 +377,10 @@ function CourseContent({ lesson, onLessonComplete }) {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                 <div className="group p-4 rounded-lg border bg-card text-card-foreground hover:border-primary/50 transition-all duration-300">
                   <div className="bg-primary/10 p-2 sm:p-3 rounded-lg w-fit group-hover:bg-primary/20 transition-colors mb-3">
-                    <BookOpen className="h-5 w-5 text-primary" />
+                    <BookOpen
+                      className="h-5 w-5 text-primary"
+                      aria-hidden="true"
+                    />
                   </div>
                   <h4 className="font-semibold text-sm sm:text-base mb-1">
                     Material Completo
@@ -333,7 +392,10 @@ function CourseContent({ lesson, onLessonComplete }) {
 
                 <div className="group p-4 rounded-lg border bg-card text-card-foreground hover:border-primary/50 transition-all duration-300">
                   <div className="bg-primary/10 p-2 sm:p-3 rounded-lg w-fit group-hover:bg-primary/20 transition-colors mb-3">
-                    <Brain className="h-5 w-5 text-primary" />
+                    <Brain
+                      className="h-5 w-5 text-primary"
+                      aria-hidden="true"
+                    />
                   </div>
                   <h4 className="font-semibold text-sm sm:text-base mb-1">
                     Exercícios Práticos
@@ -345,7 +407,10 @@ function CourseContent({ lesson, onLessonComplete }) {
 
                 <div className="group p-4 rounded-lg border bg-card text-card-foreground hover:border-primary/50 transition-all duration-300">
                   <div className="bg-primary/10 p-2 sm:p-3 rounded-lg w-fit group-hover:bg-primary/20 transition-colors mb-3">
-                    <Trophy className="h-5 w-5 text-primary" />
+                    <Trophy
+                      className="h-5 w-5 text-primary"
+                      aria-hidden="true"
+                    />
                   </div>
                   <h4 className="font-semibold text-sm sm:text-base mb-1">
                     Acompanhamento
@@ -361,7 +426,9 @@ function CourseContent({ lesson, onLessonComplete }) {
             <div className="w-full lg:w-80">
               <div className="rounded-lg p-4 sm:p-6 border bg-card text-card-foreground lg:sticky lg:top-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-base sm:text-lg font-semibold">Notificações</h2>
+                  <h2 className="text-base sm:text-lg font-semibold">
+                    Notificações
+                  </h2>
                   <span className="px-2 py-1 text-xs font-medium bg-[#F3C92C] text-background rounded-full">
                     3 novas
                   </span>
@@ -369,36 +436,50 @@ function CourseContent({ lesson, onLessonComplete }) {
                 <div className="space-y-3 sm:space-y-4">
                   <div className="group border-l-2 border-[#F3C92C] pl-3 sm:pl-4 py-2 hover:bg-primary/5 rounded-r-lg transition-colors">
                     <div className="flex items-center gap-2 mb-1">
-                      <p className="text-sm font-medium">Nova aula disponível</p>
-                      <span className="px-2 py-0.5 text-xs bg-primary/10 text-primary rounded-full">Novo</span>
+                      <p className="text-sm font-medium">
+                        Nova aula disponível
+                      </p>
+                      <span className="px-2 py-0.5 text-xs bg-primary/10 text-primary rounded-full">
+                        Novo
+                      </span>
                     </div>
                     <p className="text-xs text-muted-foreground">
                       História Medieval - Módulo 2
                     </p>
                     <div className="flex items-center gap-2 mt-1">
                       <Clock className="h-3 w-3 text-muted-foreground" />
-                      <p className="text-xs text-muted-foreground">Há 2 horas</p>
+                      <p className="text-xs text-muted-foreground">
+                        Há 2 horas
+                      </p>
                     </div>
                   </div>
 
                   <div className="group border-l-2 border-[#F3C92C] pl-3 sm:pl-4 py-2 hover:bg-primary/5 rounded-r-lg transition-colors">
                     <div className="flex items-center gap-2 mb-1">
                       <p className="text-sm font-medium">Exercício corrigido</p>
-                      <span className="px-2 py-0.5 text-xs border border-primary/20 text-primary rounded-full">Nota: 9.5</span>
+                      <span className="px-2 py-0.5 text-xs border border-primary/20 text-primary rounded-full">
+                        Nota: 9.5
+                      </span>
                     </div>
                     <p className="text-xs text-muted-foreground">
                       Matemática - Álgebra Linear
                     </p>
                     <div className="flex items-center gap-2 mt-1">
                       <Clock className="h-3 w-3 text-muted-foreground" />
-                      <p className="text-xs text-muted-foreground">Há 5 horas</p>
+                      <p className="text-xs text-muted-foreground">
+                        Há 5 horas
+                      </p>
                     </div>
                   </div>
 
                   <div className="group border-l-2 border-[#F3C92C] pl-3 sm:pl-4 py-2 hover:bg-primary/5 rounded-r-lg transition-colors">
                     <div className="flex items-center gap-2 mb-1">
-                      <p className="text-sm font-medium">Novo curso disponível</p>
-                      <span className="px-2 py-0.5 text-xs bg-primary/10 text-primary rounded-full">Curso</span>
+                      <p className="text-sm font-medium">
+                        Novo curso disponível
+                      </p>
+                      <span className="px-2 py-0.5 text-xs bg-primary/10 text-primary rounded-full">
+                        Curso
+                      </span>
                     </div>
                     <p className="text-xs text-muted-foreground">
                       Literatura Brasileira
@@ -410,7 +491,10 @@ function CourseContent({ lesson, onLessonComplete }) {
                   </div>
                 </div>
 
-                <button className="w-full mt-4 sm:mt-6 px-4 py-2 border rounded-lg text-xs sm:text-sm hover:bg-primary/5 transition-colors">
+                <button
+                  type="button"
+                  className="w-full mt-4 sm:mt-6 px-4 py-2 border rounded-lg text-xs sm:text-sm hover:bg-primary/5 transition-colors"
+                >
                   Ver todas as notificações
                 </button>
               </div>
@@ -530,14 +614,14 @@ function CourseContent({ lesson, onLessonComplete }) {
             <div className="space-y-3">
               <h3 className="text-lg font-semibold">Material Complementar</h3>
               <div className="grid gap-2 max-w-[160px]">
-                {lesson.resources.map((resource, index) => (
+                {lesson.resources.map((resource) => (
                   <Button
-                    key={index}
+                    key={`${resource.name}-${resource.url}`}
                     variant="outline"
                     className="w-full justify-start h-12"
                     onClick={() => window.open(resource.url, "_blank")}
                   >
-                    <Download className="mr-2 h-4 w-4" />
+                    <Download className="mr-2 h-4 w-4" aria-hidden="true" />
                     {resource.name}
                   </Button>
                 ))}
@@ -556,7 +640,7 @@ function CourseContent({ lesson, onLessonComplete }) {
                 }}
                 onClick={() => lesson.onNextLesson()}
               >
-                <PlayCircle className="h-4 w-4" />
+                <PlayCircle className="h-4 w-4" aria-hidden="true" />
                 Próxima Aula
               </Button>
             </div>

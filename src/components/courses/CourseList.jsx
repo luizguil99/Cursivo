@@ -20,7 +20,7 @@ function CourseList({ onCourseSelect }) {
   const initializeCoursesIfNeeded = async () => {
     try {
       console.log("Verificando se é necessário inicializar cursos...");
-      
+
       // Verificar se já existem cursos
       const { data: existingCourses, error: fetchError } = await supabase
         .from("cursos")
@@ -30,7 +30,7 @@ function CourseList({ onCourseSelect }) {
 
       if (!existingCourses?.length) {
         console.log("Nenhum curso encontrado, inicializando...");
-        
+
         // Preparar os cursos para inserção
         const subjects = Object.keys(courseLessons).map((title) => ({
           titulo: title,
@@ -45,7 +45,7 @@ function CourseList({ onCourseSelect }) {
           .insert(subjects);
 
         if (insertError) throw insertError;
-        
+
         console.log("Cursos inicializados com sucesso!");
         return true;
       }
@@ -93,8 +93,10 @@ function CourseList({ onCourseSelect }) {
           if (progressError) throw progressError;
 
           // Calcular progresso para cada curso
-          const coursesWithProgress = coursesData.map(course => {
-            const userProgress = progressData?.find(p => p.curso_id === course.id);
+          const coursesWithProgress = coursesData.map((course) => {
+            const userProgress = progressData?.find(
+              (p) => p.curso_id === course.id
+            );
             return {
               id: course.id,
               name: course.titulo,
@@ -106,11 +108,11 @@ function CourseList({ onCourseSelect }) {
           // Update cache
           coursesCache.data = coursesWithProgress;
           coursesCache.lastFetch = now;
-          
+
           setCourses(coursesWithProgress);
         } else {
           // Se não estiver logado, mostrar cursos sem progresso
-          const coursesWithoutProgress = coursesData.map(course => ({
+          const coursesWithoutProgress = coursesData.map((course) => ({
             id: course.id,
             name: course.titulo,
             description: course.descricao,
@@ -132,7 +134,7 @@ function CourseList({ onCourseSelect }) {
     };
 
     fetchCourses();
-  }, [currentUser]);
+  }, [currentUser, initializeCoursesIfNeeded]);
 
   if (error) {
     return (
@@ -143,7 +145,7 @@ function CourseList({ onCourseSelect }) {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-32">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
       </div>
     );
   }
