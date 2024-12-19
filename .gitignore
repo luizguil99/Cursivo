@@ -7,6 +7,7 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies
 node_modules
 dist
 dist-ssr
@@ -23,9 +24,46 @@ dist-ssr
 *.sln
 *.sw?
 
-# env files
+# Environment files
 .env
+.env.*
 .env.local
 .env.*.local
+.env.development
+.env.test
+.env.production
+.env.supabase
 .aider*
 .windsurfrules
+
+# Supabase
+/supabase/.temp
+/supabase/.env
+/supabase/config.toml
+/supabase/config.prod.toml
+/supabase/prod.env
+/supabase/.branches
+/supabase/.temp/
+/supabase/.env.*
+
+# Build
+/build
+/dist
+/.next
+/out
+
+# Cache
+.cache
+.npm
+.eslintcache
+.stylelintcache
+*.tsbuildinfo
+
+# Testing
+/coverage
+.nyc_output
+
+# Misc
+*.pem
+.DS_Store
+Thumbs.db
