@@ -23,17 +23,22 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/components/theme-provider";
 
-function Sidebar({ onCourseSelect, onScheduleClick }) {
+function Sidebar({ onCourseSelect, onScheduleClick, onModuleSidebarToggle }) {
   const [collapsed, setCollapsed] = React.useState(false);
   const [showCourses, setShowCourses] = React.useState(false);
   const [showMobileMenu, setShowMobileMenu] = React.useState(false);
   const navigate = useNavigate();
   const { logout } = useAuth();
   const { theme } = useTheme();
+  const isMobile = window.innerWidth < 768;
 
   const handleCourseSelect = (course) => {
     onCourseSelect(course);
-    setShowMobileMenu(false);
+    if (isMobile) {
+      setShowMobileMenu(false);
+      // Força a abertura do ModulesSidebar quando um curso é selecionado
+      onModuleSidebarToggle(false); // false significa não colapsado
+    }
   };
 
   const handleLogout = async () => {

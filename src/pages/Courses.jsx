@@ -16,6 +16,7 @@ function Courses() {
   const [selectedModule, setSelectedModule] = useState(null);
   const [selectedLesson, setSelectedLesson] = useState(null);
   const [showSchedule, setShowSchedule] = useState(false);
+  const [moduleSidebarCollapsed, setModuleSidebarCollapsed] = useState(true);
 
   useEffect(() => {
     const loadCourseData = async () => {
@@ -91,6 +92,12 @@ function Courses() {
     loadCourseData();
   }, [id, moduleId, lessonId]);
 
+  const handleCourseSelect = (course) => {
+    setSelectedCourse(course);
+    // Abre o ModulesSidebar quando um curso é selecionado
+    setModuleSidebarCollapsed(false);
+  };
+
   const handleLessonSelect = (lesson) => {
     console.log("Aula selecionada:", lesson);
     // Formatando os dados da lição para o formato esperado pelo CourseContent
@@ -106,26 +113,29 @@ function Courses() {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="h-screen flex flex-col">
       <TopNav />
-      <Sidebar
-        onCourseSelect={setSelectedCourse}
-        onScheduleClick={() => setShowSchedule(true)}
-      />
-      {selectedCourse && (
-        <ModulesSidebar
-          course={selectedCourse}
-          onSelectLesson={handleLessonSelect}
-          selectedModule={selectedModule}
+      <div className="flex-1 flex overflow-hidden">
+        <Sidebar
+          onCourseSelect={handleCourseSelect}
+          onScheduleClick={() => setShowSchedule(true)}
         />
-      )}
-      <main className="flex-1 overflow-y-auto">
-        {showSchedule ? (
-          <WeeklySchedule onClose={() => setShowSchedule(false)} />
-        ) : (
-          <CourseContent lesson={selectedLesson} />
+        {selectedCourse && (
+          <ModulesSidebar
+            course={selectedCourse}
+            onTopicSelect={handleLessonSelect}
+            collapsed={moduleSidebarCollapsed}
+            setCollapsed={setModuleSidebarCollapsed}
+          />
         )}
-      </main>
+        <main className="flex-1 overflow-y-auto">
+          {showSchedule ? (
+            <WeeklySchedule onClose={() => setShowSchedule(false)} />
+          ) : (
+            <CourseContent lesson={selectedLesson} />
+          )}
+        </main>
+      </div>
     </div>
   );
 }

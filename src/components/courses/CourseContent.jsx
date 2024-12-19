@@ -568,15 +568,12 @@ function CourseContent({ lesson, onLessonComplete }) {
 
   return (
     <div className="h-full overflow-y-auto bg-background">
-      <div className="grid grid-cols-12 gap-4">
-        <div
-          className="col-start-2 col-span-8 p-6 space-y-6"
-          style={{ marginLeft: "-2rem" }}
-        >
-          <h1 className="text-2xl font-bold">{lesson.title}</h1>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 px-4 md:px-6 lg:px-8">
+        <div className="lg:col-start-2 lg:col-span-10 xl:col-start-3 xl:col-span-8 p-4 md:p-6 space-y-4 md:space-y-6">
+          <h1 className="text-xl md:text-2xl font-bold">{lesson.title}</h1>
 
           <div
-            className="relative rounded-lg overflow-hidden bg-black w-full max-w-2xl mx-auto"
+            className="relative rounded-lg overflow-hidden bg-black w-full max-w-4xl mx-auto"
             style={{ boxShadow: "0 4px 20px rgba(243, 201, 44, 0.2)" }}
           >
             <div className="aspect-video relative">
@@ -603,24 +600,29 @@ function CourseContent({ lesson, onLessonComplete }) {
           </div>
 
           <div className="prose max-w-none">
-            <p className="text-muted-foreground whitespace-pre-line">
+            <p className="text-sm md:text-base text-muted-foreground whitespace-pre-line">
               {lesson.description}
             </p>
           </div>
 
           {Array.isArray(lesson.resources) && lesson.resources.length > 0 && (
             <div className="space-y-3">
-              <h3 className="text-lg font-semibold">Material Complementar</h3>
-              <div className="grid gap-2 max-w-[160px]">
+              <h3 className="text-base md:text-lg font-semibold">
+                Material Complementar
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-full">
                 {lesson.resources.map((resource) => (
                   <Button
                     key={`${resource.name}-${resource.url}`}
                     variant="outline"
-                    className="w-full justify-start h-12"
+                    className="w-full justify-start h-10 md:h-12"
                     onClick={() => window.open(resource.url, "_blank")}
                   >
-                    <Download className="mr-2 h-4 w-4" aria-hidden="true" />
-                    {resource.name}
+                    <Download
+                      className="mr-2 h-3 w-3 md:h-4 md:w-4"
+                      aria-hidden="true"
+                    />
+                    <span className="text-xs md:text-sm">{resource.name}</span>
                   </Button>
                 ))}
               </div>
@@ -638,8 +640,11 @@ function CourseContent({ lesson, onLessonComplete }) {
                 }}
                 onClick={() => lesson.onNextLesson()}
               >
-                <PlayCircle className="h-4 w-4" aria-hidden="true" />
-                Próxima Aula
+                <PlayCircle
+                  className="h-3 w-3 md:h-4 md:w-4"
+                  aria-hidden="true"
+                />
+                <span className="text-xs md:text-sm">Próxima Aula</span>
               </Button>
             </div>
           )}
