@@ -14,21 +14,26 @@ import {
   Lightbulb,
   Home,
   ListTodo,
+  X,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import CourseList from "./CourseList";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/components/theme-provider";
 
 function Sidebar({ onCourseSelect, onScheduleClick }) {
   const [collapsed, setCollapsed] = React.useState(false);
   const [showCourses, setShowCourses] = React.useState(false);
+  const [showMobileMenu, setShowMobileMenu] = React.useState(false);
   const navigate = useNavigate();
   const { logout } = useAuth();
+  const { theme } = useTheme();
 
   const handleCourseSelect = (course) => {
     onCourseSelect(course);
+    setShowMobileMenu(false);
   };
 
   const handleLogout = async () => {
@@ -40,22 +45,32 @@ function Sidebar({ onCourseSelect, onScheduleClick }) {
     }
   };
 
+  // Função para lidar com o clique no botão de cursos
+  const handleCoursesClick = () => {
+    if (window.innerWidth < 768) {
+      // md breakpoint
+      setShowMobileMenu(true);
+    } else {
+      setShowCourses(!showCourses);
+    }
+  };
+
   const mainButtons = [
     {
       icon: <Home className="h-5 w-5" />,
       label: "Home",
       onClick: () => {
         onCourseSelect(null);
-        navigate("/courses", { 
+        navigate("/courses", {
           replace: true,
-          state: { showExplore: true }
+          state: { showExplore: true },
         });
       },
     },
     {
       icon: <GraduationCap className="h-5 w-5" />,
       label: "Cursos",
-      onClick: () => setShowCourses(!showCourses),
+      onClick: handleCoursesClick,
     },
     {
       icon: <CalendarDays className="h-5 w-5" />,
@@ -107,21 +122,32 @@ function Sidebar({ onCourseSelect, onScheduleClick }) {
   return (
     <aside
       className={cn(
-        "relative h-screen border-r bg-card transition-all duration-300 flex flex-col",
-        collapsed ? "w-16" : "w-64"
+        "relative h-screen bg-card transition-all duration-300 flex flex-col border-r",
+        // Em dispositivos menores, sempre mostra como fechado
+        "w-10 md:w-auto",
+        // Larguras responsivas ajustadas para telas maiores
+        collapsed ? "md:w-14" : "md:w-56"
       )}
     >
-      <div className="flex items-center justify-between p-4 h-14 border-b">
-        {!collapsed && <h2 className="text-lg font-semibold">Menu</h2>}
+      <div className="flex items-center justify-between p-2 h-10 sm:h-12 md:h-14 border-b">
+        {!collapsed && (
+          <h2 className="hidden md:block text-sm sm:text-base md:text-lg font-semibold truncate">
+            Menu
+          </h2>
+        )}
         <Button
           variant="ghost"
           size="icon"
-          className={cn("h-8 w-8", collapsed && "mx-auto")}
+          className={cn(
+            "h-6 w-6 shrink-0",
+            "hidden md:flex",
+            collapsed && "mx-auto"
+          )}
           onClick={() => setCollapsed(!collapsed)}
         >
           <ChevronLeft
             className={cn(
-              "h-4 w-4 transition-transform duration-300",
+              "h-4 w-4 transition-transform",
               collapsed && "rotate-180"
             )}
           />
@@ -129,21 +155,41 @@ function Sidebar({ onCourseSelect, onScheduleClick }) {
       </div>
 
       {/* Main Navigation Buttons */}
-      <div className="p-2 space-y-1 flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-[#F3C92C] scrollbar-track-transparent hover:scrollbar-thumb-[#B4902A]">
-        <div className="space-y-1">
+      <div
+        className={cn(
+          "flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-[#F3C92C] scrollbar-track-transparent hover:scrollbar-thumb-[#B4902A]",
+          collapsed ? "space-y-2 p-1.5" : "space-y-0.5 p-1.5 sm:p-2 md:p-4"
+        )}
+      >
+        <div className={cn("space-y-0.5", collapsed && "space-y-2")}>
           {mainButtons.map((button, index) => (
             <Button
               key={index}
               variant="ghost"
               className={cn(
-                "w-full flex items-center gap-3 justify-start px-3 py-2 hover:bg-accent/50",
-                collapsed && "w-12 p-0 justify-center"
+                "w-full flex items-center h-auto",
+                collapsed
+                  ? "px-1 py-2"
+                  : "gap-1 sm:gap-1.5 md:gap-2 py-1 sm:py-1.5 md:py-2 px-2",
+                "justify-center md:justify-start",
+                collapsed && "md:justify-center"
               )}
-              onClick={button.onClick}
+              onClick={
+                button.label === "Cursos" ? handleCoursesClick : button.onClick
+              }
             >
-              {button.icon}
+              {React.cloneElement(button.icon, {
+                className: cn(
+                  "shrink-0",
+                  collapsed
+                    ? "h-4 w-4"
+                    : "h-3 w-3 sm:h-3.5 sm:w-3.5 md:h-4 md:w-4"
+                ),
+              })}
               {!collapsed && (
-                <span className="text-sm font-medium">{button.label}</span>
+                <span className="text-[10px] sm:text-xs md:text-sm font-medium truncate">
+                  {button.label}
+                </span>
               )}
             </Button>
           ))}
@@ -152,7 +198,7 @@ function Sidebar({ onCourseSelect, onScheduleClick }) {
         {/* Course List */}
         {showCourses && !collapsed && (
           <>
-            <Separator className="my-2" />
+            <Separator className="my-1.5 sm:my-2" />
             <div className="transition-all duration-300">
               <CourseList onCourseSelect={handleCourseSelect} />
             </div>
@@ -160,20 +206,57 @@ function Sidebar({ onCourseSelect, onScheduleClick }) {
         )}
       </div>
 
-      {/* Logout Button at Bottom */}
-      <div className="p-2 mt-auto border-t">
+      {/* Logout Button */}
+      <div
+        className={cn("border-t", collapsed ? "p-1.5" : "p-1.5 sm:p-2 md:p-4")}
+      >
         <Button
           variant="ghost"
           className={cn(
-            "w-full flex items-center gap-3 justify-start px-3 py-2 hover:bg-accent/50",
-            collapsed && "w-12 p-0 justify-center"
+            "w-full flex items-center h-auto",
+            collapsed
+              ? "px-1 py-2"
+              : "gap-1 sm:gap-1.5 md:gap-2 py-1 sm:py-1.5 md:py-2 px-2",
+            "justify-center md:justify-start",
+            collapsed && "md:justify-center"
           )}
           onClick={handleLogout}
         >
-          <LogOut className="h-5 w-5" />
-          {!collapsed && <span className="text-sm font-medium">Sair</span>}
+          <LogOut
+            className={cn(
+              "shrink-0",
+              collapsed ? "h-4 w-4" : "h-3 w-3 sm:h-3.5 sm:w-3.5 md:h-4 md:w-4"
+            )}
+          />
+          {!collapsed && (
+            <span className="text-[10px] sm:text-xs md:text-sm font-medium truncate">
+              Sair
+            </span>
+          )}
         </Button>
       </div>
+
+      {/* Menu móvel para cursos */}
+      {showMobileMenu && (
+        <div className="fixed inset-0 bg-black/50 dark:bg-black/80 z-50 md:hidden animate-in fade-in duration-200">
+          <div className="absolute right-0 top-0 h-full w-64 bg-background border-l border-border p-4 shadow-lg animate-in slide-in-from-right duration-300">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="font-semibold text-foreground">Cursos</h2>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowMobileMenu(false)}
+                className="hover:bg-accent hover:text-accent-foreground"
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+            <div className="overflow-y-auto h-[calc(100%-4rem)] scrollbar-thin scrollbar-thumb-accent scrollbar-track-transparent">
+              <CourseList onCourseSelect={handleCourseSelect} />
+            </div>
+          </div>
+        </div>
+      )}
     </aside>
   );
 }

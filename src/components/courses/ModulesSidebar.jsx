@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { ChevronRight, Brain, PlayCircle } from "lucide-react";
+import { ChevronRight, Brain, PlayCircle, ChevronLeft } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
@@ -12,6 +12,7 @@ import {
 import PracticeModal from "./PracticeModal";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
+import { cn } from "@/lib/utils";
 
 // Skeleton component for module titles
 const ModuleTitleSkeleton = () => (
@@ -28,6 +29,20 @@ function ModulesSidebar({ course, onSelectLesson }) {
   const [loading, setLoading] = useState(true);
   const [currentCourse, setCurrentCourse] = useState(course);
   const [completedLessons, setCompletedLessons] = useState([]);
+  const [collapsed, setCollapsed] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+      if (window.innerWidth >= 768) {
+        setCollapsed(false);
+      }
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   useEffect(() => {
     setCurrentCourse(course);
@@ -159,19 +174,40 @@ function ModulesSidebar({ course, onSelectLesson }) {
 
   return (
     <>
-      <aside className="w-72 h-screen border-r bg-card flex flex-col">
-        <div className="flex items-center p-4 h-14">
-          <h2 className="text-lg font-semibold truncate">
-            {currentCourse?.name || currentCourse?.title}
-          </h2>
+      <aside
+        className={cn(
+          "h-screen border-r bg-card flex flex-col transition-all duration-300",
+          isMobile ? (collapsed ? "w-12" : "w-44") : "w-72"
+        )}
+      >
+        <div className="flex items-center justify-between p-2 h-10 sm:h-12 md:h-14 border-b">
+          {(!isMobile || !collapsed) && (
+            <h2 className="text-sm sm:text-base md:text-lg font-semibold truncate">
+              {currentCourse?.name || currentCourse?.title}
+            </h2>
+          )}
+          {isMobile && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 shrink-0 md:hidden"
+              onClick={() => setCollapsed(!collapsed)}
+            >
+              <ChevronLeft
+                className={cn(
+                  "h-4 w-4 transition-transform",
+                  collapsed && "rotate-180"
+                )}
+              />
+            </Button>
+          )}
         </div>
-        <Separator />
 
         {/* Practice Button */}
-        <div className="p-4">
+        <div className="p-1.5 sm:p-2 md:p-4">
           <Button
             variant="outline"
-            className="w-full flex items-center gap-2 mb-2"
+            className="w-full flex items-center justify-center gap-1 sm:gap-1.5 md:gap-2 text-[10px] sm:text-xs md:text-sm py-1 sm:py-1.5 md:py-2"
             onClick={() => {
               setSelectedTopic(null);
               setShowPractice(true);
@@ -183,8 +219,12 @@ function ModulesSidebar({ course, onSelectLesson }) {
               color: "white",
             }}
           >
-            <Brain className="h-4 w-4" />
-            Praticar Todos os Tópicos
+            <Brain className="h-3 w-3 sm:h-3.5 sm:w-3.5 md:h-4 md:w-4" />
+            {(!isMobile || !collapsed) && (
+              <span className="truncate">
+                {isMobile ? "Praticar" : "Praticar Todos os Tópicos"}
+              </span>
+            )}
           </Button>
         </div>
         <Separator />
@@ -195,34 +235,64 @@ function ModulesSidebar({ course, onSelectLesson }) {
             {modules.length === 0 && loading
               ? [...Array(3)].map((_, index) => (
                   <AccordionItem key={index} value={`skeleton-${index}`}>
-                    <AccordionTrigger className="hover:bg-accent hover:no-underline px-4">
-                      <ModuleTitleSkeleton />
+                    <AccordionTrigger className="hover:bg-accent hover:no-underline px-2 py-1.5 sm:py-2 md:py-3 text-xs sm:text-sm">
+                      {(!isMobile || !collapsed) && <ModuleTitleSkeleton />}
                     </AccordionTrigger>
                   </AccordionItem>
                 ))
               : modules.map((module) => (
                   <AccordionItem key={module.id} value={module.id}>
-                    <AccordionTrigger className="hover:bg-accent hover:no-underline px-4">
-                      <span className="text-sm font-medium">
-                        {module.titulo}
-                      </span>
+                    <AccordionTrigger
+                      className={cn(
+                        "hover:bg-accent hover:no-underline py-1.5 sm:py-2 md:py-3",
+                        isMobile && collapsed ? "px-1" : "px-2"
+                      )}
+                    >
+                      {isMobile && collapsed ? (
+                        <span className="w-6 h-6 flex items-center justify-center text-[10px] font-medium">
+                          {module.ordem_indice}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] sm:text-xs md:text-sm font-medium">
+                          {module.titulo}
+                        </span>
+                      )}
                     </AccordionTrigger>
                     <AccordionContent>
-                      <div className="space-y-1 p-1">
+                      <div className="space-y-0.5 p-0.5">
                         {videosByModule[module.id]?.map((video) => (
                           <Button
                             key={video.id}
                             variant="ghost"
-                            className="w-full justify-start gap-2 h-auto py-2 px-4 font-normal relative"
+                            className={cn(
+                              "w-full justify-start h-auto font-normal relative",
+                              isMobile && collapsed
+                                ? "px-1 py-1"
+                                : "gap-1 sm:gap-1.5 md:gap-2 py-1 sm:py-1.5 md:py-2 px-2"
+                            )}
                             onClick={() => handleLessonSelect(video, module)}
                           >
-                            <PlayCircle className="h-4 w-4 shrink-0" />
-                            <span className="truncate text-sm">
-                              {video.titulo}
-                            </span>
+                            <PlayCircle
+                              className={cn(
+                                "shrink-0",
+                                isMobile && collapsed
+                                  ? "h-4 w-4"
+                                  : "h-3 w-3 sm:h-3.5 sm:w-3.5 md:h-4 md:w-4"
+                              )}
+                            />
+                            {(!isMobile || !collapsed) && (
+                              <span className="truncate text-[10px] sm:text-xs md:text-sm">
+                                {video.titulo}
+                              </span>
+                            )}
                             {isLessonCompleted(video.id) && (
                               <div
-                                className="absolute right-2 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-[#F3C92C]"
+                                className={cn(
+                                  "absolute right-1 top-1/2 -translate-y-1/2 rounded-full bg-[#F3C92C]",
+                                  isMobile && collapsed
+                                    ? "w-1.5 h-1.5"
+                                    : "right-1 sm:right-1.5 md:right-2 w-1 sm:w-1.5 md:w-2 h-1 sm:h-1.5 md:h-2"
+                                )}
                                 title="Aula concluída"
                               />
                             )}
