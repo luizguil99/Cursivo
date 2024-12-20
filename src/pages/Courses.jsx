@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import Sidebar from "@/components/courses/Sidebar";
 import ModulesSidebar from "@/components/courses/ModulesSidebar";
@@ -10,13 +10,11 @@ import { supabase } from "../lib/supabase";
 function Courses() {
   const location = useLocation();
   const { id, moduleId, lessonId } = useParams();
-  const [selectedCourse, setSelectedCourse] = useState(
-    location.state?.course || null
-  );
-  const [selectedModule, setSelectedModule] = useState(null);
+  const [selectedCourse, setSelectedCourse] = useState(null);
   const [selectedLesson, setSelectedLesson] = useState(null);
   const [showSchedule, setShowSchedule] = useState(false);
-  const [moduleSidebarCollapsed, setModuleSidebarCollapsed] = useState(true);
+  const [moduleSidebarCollapsed, setModuleSidebarCollapsed] = useState(false);
+  const [updateSidebarCompletion, setUpdateSidebarCompletion] = useState(null);
 
   useEffect(() => {
     const loadCourseData = async () => {
@@ -47,11 +45,11 @@ function Courses() {
 
               if (moduleError) throw moduleError;
               if (moduleData) {
-                setSelectedModule({
-                  id: moduleData.id,
-                  title: moduleData.titulo,
-                  ...moduleData,
-                });
+                // setSelectedModule({
+                //   id: moduleData.id,
+                //   title: moduleData.titulo,
+                //   ...moduleData,
+                // });
 
                 // Se tiver lessonId, carregar a lição
                 if (lessonId) {
@@ -84,7 +82,6 @@ function Courses() {
       } else {
         // Reset states when there's no ID in the URL
         setSelectedCourse(null);
-        setSelectedModule(null);
         setSelectedLesson(null);
       }
     };
@@ -112,28 +109,40 @@ function Courses() {
     setShowSchedule(false);
   };
 
+  // Função para atualizar a conclusão na sidebar
+  const handleUpdateSidebarCompletion = useCallback((updateFn) => {
+    setUpdateSidebarCompletion(() => updateFn);
+  }, []);
+
   // Função para buscar a próxima aula
   const getNextLesson = async (currentLesson) => {
     if (!currentLesson?.modulo_id) return null;
 
     try {
       console.log("Buscando próxima aula no módulo:", currentLesson.modulo_id);
-      console.log("Índice atual:", currentLesson.ordem_indice);
 
-      // Busca todas as aulas do módulo atual
+      // Busca todas as aulas do módulo atual ordenadas por ordem_indice
       const { data: moduleVideos } = await supabase
         .from("videoaulas")
         .select("*")
         .eq("modulo_id", currentLesson.modulo_id)
-        .order("ordem_indice");
+        .order("ordem_indice", { ascending: true });
 
-      if (!moduleVideos) return null;
+      if (!moduleVideos?.length) return null;
 
       // Encontra o índice da aula atual
-      const currentIndex = moduleVideos.findIndex(video => video.id === currentLesson.id);
-      
+      const currentIndex = moduleVideos.findIndex(
+        (video) => video.id === currentLesson.id
+      );
+      console.log(
+        "Índice atual:",
+        currentIndex,
+        "Total de aulas:",
+        moduleVideos.length
+      );
+
       // Se houver uma próxima aula no módulo atual, retorna ela
-      if (currentIndex < moduleVideos.length - 1) {
+      if (currentIndex > -1 && currentIndex < moduleVideos.length - 1) {
         console.log("Próxima aula encontrada no mesmo módulo");
         return moduleVideos[currentIndex + 1];
       }
@@ -192,17 +201,26 @@ function Courses() {
             onTopicSelect={handleLessonSelect}
             collapsed={moduleSidebarCollapsed}
             setCollapsed={setModuleSidebarCollapsed}
+            onUpdateCompletion={handleUpdateSidebarCompletion}
           />
         )}
         <main className="flex-1 overflow-y-auto">
           {showSchedule ? (
             <WeeklySchedule onClose={() => setShowSchedule(false)} />
           ) : (
-            <CourseContent 
-              lesson={selectedLesson} 
+            <CourseContent
+              lesson={selectedLesson}
+              updateSidebarCompletion={updateSidebarCompletion}
               onVideoEnd={async () => {
-                // Buscar e navegar para a próxima aula
+                // Atualizar a bolinha na sidebar imediatamente
+                if (updateSidebarCompletion) {
+                  updateSidebarCompletion(selectedLesson.id, true);
+                }
+
+                // Buscar a próxima aula antes de marcar como concluída
                 const nextLesson = await getNextLesson(selectedLesson);
+
+                // Navegar para a próxima aula se existir
                 if (nextLesson) {
                   handleLessonSelect(nextLesson);
                 }

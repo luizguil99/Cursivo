@@ -7,6 +7,7 @@ import {
   Brain,
   Trophy,
   Clock,
+  ArrowRight,
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import FloatingChatButton from "./FloatingChatButton";
@@ -15,13 +16,13 @@ import { useAuth } from "@/contexts/AuthContext";
 import VimeoPlayer from "./VimeoPlayer";
 import PandaVideo from "@/components/ui/panda-video";
 
-function CourseContent({ lesson, onVideoEnd }) {
+function CourseContent({ lesson, onVideoEnd, updateSidebarCompletion }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { currentUser } = useAuth();
-  const [isCompleted, setIsCompleted] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [currentVideoId, setCurrentVideoId] = useState(null);
+  const [isChangingLesson, setIsChangingLesson] = useState(false);
 
   // Debug do usuário
   useEffect(() => {
@@ -40,7 +41,6 @@ function CourseContent({ lesson, onVideoEnd }) {
   useEffect(() => {
     if (lesson?.id !== currentVideoId) {
       setIsLoading(true);
-      setIsCompleted(false);
       setCurrentVideoId(lesson?.id);
     }
   }, [lesson?.id, currentVideoId]);
@@ -63,11 +63,9 @@ function CourseContent({ lesson, onVideoEnd }) {
           return;
         }
 
-        setIsCompleted(!!data);
+        setIsLoading(false);
       } catch (error) {
         console.error("Erro ao verificar conclusão:", error);
-      } finally {
-        setIsLoading(false);
       }
     };
 
@@ -76,11 +74,23 @@ function CourseContent({ lesson, onVideoEnd }) {
     }
   }, [currentUser?.id, lesson?.id, currentVideoId]);
 
+  // Função para lidar com o fim do vídeo
   const handleVideoEnd = useCallback(async () => {
     if (!currentUser?.id || !lesson?.id) {
       console.log("Usuário não logado ou aula não encontrada");
       return;
     }
+
+    // Ativar loading
+    setIsChangingLesson(true);
+
+    // Atualizar a bolinha na sidebar imediatamente
+    if (updateSidebarCompletion) {
+      updateSidebarCompletion(lesson.id, true);
+    }
+
+    // Chamar onVideoEnd imediatamente para uma experiência mais responsiva
+    if (onVideoEnd) onVideoEnd();
 
     try {
       // Primeiro, verifica se já existe um registro
@@ -99,9 +109,6 @@ function CourseContent({ lesson, onVideoEnd }) {
       // Se já existe um registro, não precisa fazer nada
       if (existingData) {
         console.log("Aula já foi concluída anteriormente");
-        setIsCompleted(true);
-        // Navegar para a próxima aula
-        if (onVideoEnd) onVideoEnd();
         return;
       }
 
@@ -121,14 +128,77 @@ function CourseContent({ lesson, onVideoEnd }) {
       }
 
       console.log("Progresso salvo com sucesso!");
-      setIsCompleted(true);
-
-      // Navegar para a próxima aula
-      if (onVideoEnd) onVideoEnd();
     } catch (error) {
       console.error("Erro ao salvar progresso:", error);
     }
-  }, [currentUser?.id, lesson?.id, onVideoEnd]);
+  }, [currentUser?.id, lesson?.id, onVideoEnd, updateSidebarCompletion]);
+
+  // Desativar loading quando mudar de aula
+  useEffect(() => {
+    setIsChangingLesson(false);
+  }, [lesson?.id]);
+
+  // Função para converter URLs de vídeo em URLs de embed
+  const getVideoEmbedUrl = (url) => {
+    if (!url) return "";
+
+    // Parâmetros do Vimeo para remover todos os controles
+    const vimeoParams = [
+      "title=0",
+      "byline=0",
+      "portrait=0",
+      "sidedock=0",
+      "controls=1",
+      "background=0",
+      "share=0",
+      "like=0",
+      "watch_later=0",
+      "playsinline=1",
+      "transparent=0",
+      "autopause=0",
+      "dnt=1",
+    ].join("&");
+
+    // Se já for uma URL de embed do Vimeo
+    if (url.includes("player.vimeo.com")) {
+      const hasParams = url.includes("?");
+      const connector = hasParams ? "&" : "?";
+      return `${url}${connector}${vimeoParams}`;
+    }
+
+    // Vimeo
+    const vimeoMatch = url.match(/vimeo\.com\/(\d+)/);
+    if (vimeoMatch) {
+      return `https://player.vimeo.com/video/${vimeoMatch[1]}?${vimeoParams}`;
+    }
+
+    // YouTube
+    const youtubeMatch = url.match(
+      /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|v\/|embed\/))([^&?]+)/
+    );
+    if (youtubeMatch) {
+      return `https://www.youtube.com/embed/${youtubeMatch[1]}`;
+    }
+
+    return url;
+  };
+
+  // Verificar se é um vídeo do Vimeo e extrair o ID
+  const getVimeoId = (url) => {
+    if (!url) return null;
+    // Tentar extrair ID de URL normal do Vimeo
+    const vimeoMatch = url.match(/vimeo\.com\/(\d+)/);
+    if (vimeoMatch) return vimeoMatch[1];
+
+    // Tentar extrair ID de URL de embed do Vimeo
+    const vimeoEmbedMatch = url.match(/player\.vimeo\.com\/video\/(\d+)/);
+    if (vimeoEmbedMatch) return vimeoEmbedMatch[1];
+
+    return null;
+  };
+
+  const isVimeoVideo = lesson?.videoUrl?.includes("vimeo.com");
+  const vimeoId = isVimeoVideo ? getVimeoId(lesson.videoUrl) : null;
 
   // Se não houver lição ou se showExplore for true, mostra a página de exploração
   if (!lesson || location.state?.showExplore) {
@@ -504,68 +574,6 @@ function CourseContent({ lesson, onVideoEnd }) {
     );
   }
 
-  // Função para converter URLs de vídeo em URLs de embed
-  const getVideoEmbedUrl = (url) => {
-    if (!url) return "";
-
-    // Parâmetros do Vimeo para remover todos os controles
-    const vimeoParams = [
-      "title=0",
-      "byline=0",
-      "portrait=0",
-      "sidedock=0",
-      "controls=1",
-      "background=0",
-      "share=0",
-      "like=0",
-      "watch_later=0",
-      "playsinline=1",
-      "transparent=0",
-      "autopause=0",
-      "dnt=1",
-    ].join("&");
-
-    // Se já for uma URL de embed do Vimeo
-    if (url.includes("player.vimeo.com")) {
-      const hasParams = url.includes("?");
-      const connector = hasParams ? "&" : "?";
-      return `${url}${connector}${vimeoParams}`;
-    }
-
-    // Vimeo
-    const vimeoMatch = url.match(/vimeo\.com\/(\d+)/);
-    if (vimeoMatch) {
-      return `https://player.vimeo.com/video/${vimeoMatch[1]}?${vimeoParams}`;
-    }
-
-    // YouTube
-    const youtubeMatch = url.match(
-      /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|v\/|embed\/))([^&?]+)/
-    );
-    if (youtubeMatch) {
-      return `https://www.youtube.com/embed/${youtubeMatch[1]}`;
-    }
-
-    return url;
-  };
-
-  // Verificar se é um vídeo do Vimeo e extrair o ID
-  const getVimeoId = (url) => {
-    if (!url) return null;
-    // Tentar extrair ID de URL normal do Vimeo
-    const vimeoMatch = url.match(/vimeo\.com\/(\d+)/);
-    if (vimeoMatch) return vimeoMatch[1];
-
-    // Tentar extrair ID de URL de embed do Vimeo
-    const vimeoEmbedMatch = url.match(/player\.vimeo\.com\/video\/(\d+)/);
-    if (vimeoEmbedMatch) return vimeoEmbedMatch[1];
-
-    return null;
-  };
-
-  const isVimeoVideo = lesson?.videoUrl?.includes("vimeo.com");
-  const vimeoId = isVimeoVideo ? getVimeoId(lesson.videoUrl) : null;
-
   return (
     <div className="h-full overflow-y-auto bg-background">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 px-4 md:px-6 lg:px-8">
@@ -590,6 +598,15 @@ function CourseContent({ lesson, onVideoEnd }) {
                   width="100%"
                   height="100%"
                 />
+              )}
+              {isChangingLesson && (
+                <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                  <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 flex items-center gap-2 text-white">
+                    <div className="w-4 h-4 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" />
+                    <span>Próxima aula</span>
+                    <ArrowRight className="w-4 h-4 text-yellow-400 animate-pulse" />
+                  </div>
+                </div>
               )}
             </div>
           </div>
