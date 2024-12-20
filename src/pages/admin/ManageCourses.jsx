@@ -194,6 +194,12 @@ export default function ManageCourses() {
     }
   };
 
+  const extractPandaVideoId = (input) => {
+    // Extrair ID do iframe do Panda Video
+    const pandaMatch = input.match(/v=([a-f0-9-]+)/);
+    return pandaMatch ? pandaMatch[1] : null;
+  };
+
   const transformVideoUrl = (url) => {
     if (!url) return "";
 
@@ -211,6 +217,12 @@ export default function ManageCourses() {
       return `https://www.youtube.com/embed/${youtubeMatch[1]}`;
     }
 
+    // Transformar iframe do Panda Video
+    const pandaMatch = extractPandaVideoId(url);
+    if (pandaMatch) {
+      return `https://player-vz-7a331dec-5f3.tv.pandavideo.com.br/embed/?v=${pandaMatch}`;
+    }
+
     return url;
   };
 
@@ -225,7 +237,10 @@ export default function ManageCourses() {
     const vimeoRegex =
       /^(?:https?:\/\/)?(?:www\.|player\.)?vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/(?:[^\/]*)\/videos\/|video\/|)(\d+)(?:|\/\?)/;
 
-    return youtubeRegex.test(url) || vimeoRegex.test(url);
+    // Validar iframe do Panda Video
+    const pandaRegex = /v=([a-f0-9-]+)/;
+
+    return youtubeRegex.test(url) || vimeoRegex.test(url) || pandaRegex.test(url);
   };
 
   const handleAddCourse = async (e) => {
