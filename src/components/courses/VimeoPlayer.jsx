@@ -79,7 +79,7 @@ const VimeoPlayer = ({ videoId, onVideoEnd, lessonId }) => {
         // Adiciona evento para salvar o tempo quando a página é ocultada
         const handleVisibilityChange = () => {
           if (document.hidden) {
-            player.getCurrentTime().then(time => {
+            player.getCurrentTime().then((time) => {
               player.savedTime = time;
             });
           } else if (player.savedTime) {
@@ -88,12 +88,14 @@ const VimeoPlayer = ({ videoId, onVideoEnd, lessonId }) => {
           }
         };
 
-        document.addEventListener('visibilitychange', handleVisibilityChange);
+        document.addEventListener("visibilitychange", handleVisibilityChange);
 
         return () => {
-          document.removeEventListener('visibilitychange', handleVisibilityChange);
+          document.removeEventListener(
+            "visibilitychange",
+            handleVisibilityChange
+          );
         };
-
       } catch (error) {
         console.error("Erro ao inicializar player:", error);
       }

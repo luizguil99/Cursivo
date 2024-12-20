@@ -13,8 +13,9 @@ import FloatingChatButton from "./FloatingChatButton";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
 import VimeoPlayer from "./VimeoPlayer";
+import PandaVideo from "@/components/ui/panda-video";
 
-function CourseContent({ lesson, onLessonComplete }) {
+function CourseContent({ lesson, onVideoEnd }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { currentUser } = useAuth();
@@ -99,6 +100,8 @@ function CourseContent({ lesson, onLessonComplete }) {
       if (existingData) {
         console.log("Aula já foi concluída anteriormente");
         setIsCompleted(true);
+        // Navegar para a próxima aula
+        if (onVideoEnd) onVideoEnd();
         return;
       }
 
@@ -120,15 +123,12 @@ function CourseContent({ lesson, onLessonComplete }) {
       console.log("Progresso salvo com sucesso!");
       setIsCompleted(true);
 
-      // Notificar o componente pai que a aula foi concluída
-      if (onLessonComplete) {
-        console.log("Notificando componente pai sobre conclusão");
-        onLessonComplete(lesson.id);
-      }
+      // Navegar para a próxima aula
+      if (onVideoEnd) onVideoEnd();
     } catch (error) {
       console.error("Erro ao salvar progresso:", error);
     }
-  }, [currentUser?.id, lesson?.id, onLessonComplete]);
+  }, [currentUser?.id, lesson?.id, onVideoEnd]);
 
   // Se não houver lição ou se showExplore for true, mostra a página de exploração
   if (!lesson || location.state?.showExplore) {
@@ -584,16 +584,11 @@ function CourseContent({ lesson, onLessonComplete }) {
                   lessonId={lesson.id}
                 />
               ) : (
-                <iframe
-                  className="absolute inset-0 w-full h-full"
-                  src={getVideoEmbedUrl(lesson.videoUrl)}
-                  title={lesson.title}
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                  referrerPolicy="origin"
-                  loading="lazy"
-                  sandbox="allow-scripts allow-same-origin allow-presentation"
-                  onEnded={handleVideoEnd}
+                <PandaVideo
+                  videoUrl={lesson.videoUrl}
+                  onVideoEnd={() => handleVideoEnd()}
+                  width="100%"
+                  height="100%"
                 />
               )}
             </div>

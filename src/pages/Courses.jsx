@@ -112,6 +112,72 @@ function Courses() {
     setShowSchedule(false);
   };
 
+  // Função para buscar a próxima aula
+  const getNextLesson = async (currentLesson) => {
+    if (!currentLesson?.modulo_id) return null;
+
+    try {
+      console.log("Buscando próxima aula no módulo:", currentLesson.modulo_id);
+      console.log("Índice atual:", currentLesson.ordem_indice);
+
+      // Busca todas as aulas do módulo atual
+      const { data: moduleVideos } = await supabase
+        .from("videoaulas")
+        .select("*")
+        .eq("modulo_id", currentLesson.modulo_id)
+        .order("ordem_indice");
+
+      if (!moduleVideos) return null;
+
+      // Encontra o índice da aula atual
+      const currentIndex = moduleVideos.findIndex(video => video.id === currentLesson.id);
+      
+      // Se houver uma próxima aula no módulo atual, retorna ela
+      if (currentIndex < moduleVideos.length - 1) {
+        console.log("Próxima aula encontrada no mesmo módulo");
+        return moduleVideos[currentIndex + 1];
+      }
+
+      // Se não houver mais aulas no módulo atual, busca o próximo módulo
+      console.log("Buscando próximo módulo");
+      const { data: currentModule } = await supabase
+        .from("modulos")
+        .select("*")
+        .eq("id", currentLesson.modulo_id)
+        .single();
+
+      if (!currentModule) return null;
+
+      const { data: nextModule } = await supabase
+        .from("modulos")
+        .select("*")
+        .eq("curso_id", currentModule.curso_id)
+        .gt("ordem_indice", currentModule.ordem_indice)
+        .order("ordem_indice")
+        .limit(1)
+        .single();
+
+      if (nextModule) {
+        // Busca a primeira aula do próximo módulo
+        const { data: firstLessonNextModule } = await supabase
+          .from("videoaulas")
+          .select("*")
+          .eq("modulo_id", nextModule.id)
+          .order("ordem_indice")
+          .limit(1)
+          .single();
+
+        console.log("Primeira aula do próximo módulo:", firstLessonNextModule);
+        return firstLessonNextModule;
+      }
+
+      return null;
+    } catch (error) {
+      console.error("Erro ao buscar próxima aula:", error);
+      return null;
+    }
+  };
+
   return (
     <div className="h-screen flex flex-col">
       <TopNav />
@@ -132,7 +198,16 @@ function Courses() {
           {showSchedule ? (
             <WeeklySchedule onClose={() => setShowSchedule(false)} />
           ) : (
-            <CourseContent lesson={selectedLesson} />
+            <CourseContent 
+              lesson={selectedLesson} 
+              onVideoEnd={async () => {
+                // Buscar e navegar para a próxima aula
+                const nextLesson = await getNextLesson(selectedLesson);
+                if (nextLesson) {
+                  handleLessonSelect(nextLesson);
+                }
+              }}
+            />
           )}
         </main>
       </div>

@@ -19,12 +19,7 @@ const ModuleTitleSkeleton = () => (
   <span className="animate-pulse bg-gray-300 rounded h-4 w-24 inline-block"></span>
 );
 
-function ModulesSidebar({
-  course,
-  onTopicSelect,
-  collapsed,
-  setCollapsed,
-}) {
+function ModulesSidebar({ course, onTopicSelect, collapsed, setCollapsed }) {
   const isMobile = window.innerWidth < 768;
   const [modules, setModules] = useState([]);
   const [videos, setVideos] = useState([]);
@@ -327,12 +322,19 @@ function ModulesSidebar({
                                 <span className="truncate text-[10px] sm:text-xs md:text-sm">
                                   {video.titulo}
                                 </span>
-                                {isLessonCompleted(video.id) && (
-                                  <div
-                                    className="absolute right-1 sm:right-1.5 md:right-2 top-1/2 -translate-y-1/2 rounded-full bg-[#F3C92C] w-1 sm:w-1.5 md:w-2 h-1 sm:h-1.5 md:h-2"
-                                    title="Aula concluída"
-                                  />
-                                )}
+                                <div
+                                  className={cn(
+                                    "absolute right-1 sm:right-1.5 md:right-2 top-1/2 -translate-y-1/2 rounded-full w-1 sm:w-1.5 md:w-2 h-1 sm:h-1.5 md:h-2",
+                                    isLessonCompleted(video.id)
+                                      ? "bg-[#F3C92C]"
+                                      : "bg-zinc-400"
+                                  )}
+                                  title={
+                                    isLessonCompleted(video.id)
+                                      ? "Aula concluída"
+                                      : "Aula não concluída"
+                                  }
+                                />
                               </>
                             )}
                           </Button>
@@ -347,10 +349,7 @@ function ModulesSidebar({
 
       {/* Practice Modal */}
       {showPractice && (
-        <PracticeModal
-          onClose={() => setShowPractice(false)}
-          course={course}
-        />
+        <PracticeModal onClose={() => setShowPractice(false)} course={course} />
       )}
     </>
   );
