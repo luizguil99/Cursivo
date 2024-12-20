@@ -60,11 +60,13 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { LogOut } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
+import { uploadImage } from "@/lib/s3";
 
 export default function ManageCourses() {
   const { currentUser, signOut } = useAuth();
   const [courses, setCourses] = useState([]);
   const [modules, setModules] = useState({});
+  const [imageUploadLoading, setImageUploadLoading] = useState(false);
   const [videos, setVideos] = useState({});
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [selectedModule, setSelectedModule] = useState(null);
@@ -193,32 +195,36 @@ export default function ManageCourses() {
   };
 
   const transformVideoUrl = (url) => {
-    if (!url) return '';
+    if (!url) return "";
 
     // Transformar URL do Vimeo em URL de embed
     const vimeoMatch = url.match(/vimeo\.com\/(\d+)/);
     if (vimeoMatch) {
       return `https://player.vimeo.com/video/${vimeoMatch[1]}`;
     }
-    
+
     // Transformar URL do YouTube em URL de embed
-    const youtubeMatch = url.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/);
+    const youtubeMatch = url.match(
+      /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/
+    );
     if (youtubeMatch) {
       return `https://www.youtube.com/embed/${youtubeMatch[1]}`;
     }
-    
+
     return url;
   };
 
   const validateVideoUrl = (url) => {
     if (!url) return false;
-    
+
     // Validar URL do YouTube
-    const youtubeRegex = /^(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
-    
+    const youtubeRegex =
+      /^(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
+
     // Validar URL do Vimeo
-    const vimeoRegex = /^(?:https?:\/\/)?(?:www\.|player\.)?vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/(?:[^\/]*)\/videos\/|video\/|)(\d+)(?:|\/\?)/;
-    
+    const vimeoRegex =
+      /^(?:https?:\/\/)?(?:www\.|player\.)?vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/(?:[^\/]*)\/videos\/|video\/|)(\d+)(?:|\/\?)/;
+
     return youtubeRegex.test(url) || vimeoRegex.test(url);
   };
 
@@ -296,11 +302,12 @@ export default function ManageCourses() {
 
   const handleAddVideo = async (e) => {
     e.preventDefault();
-    
+
     if (!validateVideoUrl(newVideo.videoUrl)) {
       toast({
         title: "URL inválida",
-        description: "Por favor, insira uma URL válida do YouTube ou Vimeo (ex: https://vimeo.com/123456789 ou https://youtube.com/watch?v=abcdef)",
+        description:
+          "Por favor, insira uma URL válida do YouTube ou Vimeo (ex: https://vimeo.com/123456789 ou https://youtube.com/watch?v=abcdef)",
         variant: "destructive",
       });
       return;
@@ -331,7 +338,7 @@ export default function ManageCourses() {
       setNewVideo({ title: "", description: "", videoUrl: "" });
       setResources([{ name: "", url: "" }]);
       fetchCourses();
-      
+
       toast({
         title: "Vídeo adicionado",
         description: "O vídeo foi adicionado com sucesso!",
@@ -343,6 +350,26 @@ export default function ManageCourses() {
         description: error.message,
         variant: "destructive",
       });
+    }
+  };
+  const handleImageUpload = async (file) => {
+    try {
+      setImageUploadLoading(true);
+      const imageUrl = await uploadImage(file);
+      setNewQuestion((prev) => ({ ...prev, image: imageUrl }));
+      toast({
+        title: "Sucesso!",
+        description: "Imagem carregada com sucesso.",
+      });
+    } catch (error) {
+      console.error("Erro ao fazer upload da imagem:", error);
+      toast({
+        variant: "destructive",
+        title: "Erro!",
+        description: "Erro ao fazer upload da imagem: " + error.message,
+      });
+    } finally {
+      setImageUploadLoading(false);
     }
   };
 
@@ -500,7 +527,8 @@ export default function ManageCourses() {
     if (!validateVideoUrl(editingVideo.url_video)) {
       toast({
         title: "URL inválida",
-        description: "Por favor, insira uma URL válida do YouTube ou Vimeo (ex: https://vimeo.com/123456789 ou https://youtube.com/watch?v=abcdef)",
+        description:
+          "Por favor, insira uma URL válida do YouTube ou Vimeo (ex: https://vimeo.com/123456789 ou https://youtube.com/watch?v=abcdef)",
         variant: "destructive",
       });
       return;
@@ -508,7 +536,8 @@ export default function ManageCourses() {
 
     setLoading(true);
     try {
-      const validResources = editingVideo.recursos?.filter((r) => r.name && r.url) || [];
+      const validResources =
+        editingVideo.recursos?.filter((r) => r.name && r.url) || [];
       const transformedUrl = transformVideoUrl(editingVideo.url_video);
 
       const { data, error } = await supabase
@@ -1468,19 +1497,66 @@ export default function ManageCourses() {
                 />
               </div>
               <div>
-                <Label htmlFor="image">URL da Imagem (opcional)</Label>
-                <Input
-                  id="image"
-                  value={newQuestion.image}
-                  onChange={(e) =>
-                    setNewQuestion({
-                      ...newQuestion,
-                      image: e.target.value,
-                    })
-                  }
-                  placeholder="Cole a URL da imagem"
-                />
+                <Label>Tipo de Imagem</Label>
+                <div className="flex gap-4 mt-2">
+                  <Button
+                    type="button"
+                    variant={uploadType === "url" ? "default" : "outline"}
+                    onClick={() => setUploadType("url")}
+                  >
+                    URL da Imagem
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={uploadType === "file" ? "default" : "outline"}
+                    onClick={() => setUploadType("file")}
+                  >
+                    Upload de Imagem
+                  </Button>
+                </div>
               </div>
+              {uploadType === "url" ? (
+                <div>
+                  <Label htmlFor="image">URL da Imagem (opcional)</Label>
+                  <Input
+                    id="image"
+                    value={newQuestion.image}
+                    onChange={(e) =>
+                      setNewQuestion({
+                        ...newQuestion,
+                        image: e.target.value,
+                      })
+                    }
+                    placeholder="Cole a URL da imagem"
+                  />
+                </div>
+              ) : (
+                <div>
+                  <Label htmlFor="image">Imagem da Questão(opcional)</Label>
+                  <div className="flex gap-2 items-center">
+                    <Input
+                      id="image"
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleImageUpload(file);
+                      }}
+                      disabled={imageUploadLoading}
+                    />
+                    {imageUploadLoading && (
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary" />
+                    )}
+                  </div>
+                  {newQuestion.image && (
+                    <img
+                      src={newQuestion.image}
+                      alt="Preview"
+                      className="mt-2 max-w-xs rounded-md shadow-sm"
+                    />
+                  )}
+                </div>
+              )}
               <div>
                 <Label>Opções de Resposta</Label>
                 {newQuestion.options.slice(0, 4).map((option, index) => (

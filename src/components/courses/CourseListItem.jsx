@@ -1,5 +1,5 @@
 import React from "react";
-import { ProgressBar } from "./ProgressBar";
+import { CourseProgress } from "./CourseProgress";
 
 function CourseListItem({ course, onSelect }) {
   return (
@@ -9,7 +9,7 @@ function CourseListItem({ course, onSelect }) {
     >
       <div className="space-y-1">
         <div className="text-sm font-medium truncate">{course.name}</div>
-        <ProgressBar progress={course.progress} />
+        <CourseProgress courseId={course.id} />
       </div>
     </button>
   );
