@@ -1,14 +1,15 @@
 // Componente PandaVideo para reprodução de vídeos da plataforma Panda
-// Este componente encapsula o iframe do PandaVideo com propriedades personalizáveis
+// Este componente encapsula o iframe do PandaVideo mantendo as configurações originais da plataforma
 
-const PandaVideo = ({ videoId, width = "720", height = "360" }) => {
-  // Construindo a URL do player com o ID do vídeo
-  const playerUrl = `https://player-vz-7a331dec-5f3.tv.pandavideo.com.br/embed/?v=${videoId}`;
-
+const PandaVideo = ({ 
+  videoUrl, // URL completa do iframe do Panda Video
+  width = "720", 
+  height = "360"
+}) => {
   return (
     <iframe
-      id={`panda-${videoId}`}
-      src={playerUrl}
+      id={`panda-${videoUrl.match(/v=([a-f0-9-]+)/)?.[1] || ''}`}
+      src={videoUrl}
       style={{ border: "none" }}
       allow="accelerometer;gyroscope;autoplay;encrypted-media;picture-in-picture"
       allowFullScreen={true}
