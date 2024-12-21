@@ -199,7 +199,7 @@ function CourseContent({ lesson, onVideoEnd, updateSidebarCompletion }) {
 
   const isVimeoVideo = lesson?.videoUrl?.includes("vimeo.com");
   const vimeoId = isVimeoVideo ? getVimeoId(lesson.videoUrl) : null;
-
+  const videoUrl = lesson?.videoUrl;
   // Se não houver lição ou se showExplore for true, mostra a página de exploração
   if (!lesson || location.state?.showExplore) {
     return (
@@ -224,7 +224,6 @@ function CourseContent({ lesson, onVideoEnd, updateSidebarCompletion }) {
                     </span>
                   </div>
                 </div>
-
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 mb-6">
                   {/* Card 2 - Primeira coluna, primeira linha */}
                   <div className="group rounded-lg p-3 sm:p-4 border bg-card hover:border-primary/50 transition-all duration-300">
@@ -294,7 +293,6 @@ function CourseContent({ lesson, onVideoEnd, updateSidebarCompletion }) {
                       </div>
                     </div>
                   </div>
-
                   {/* Card 3 - Segunda coluna, segunda linha */}
                   <div className="group rounded-lg p-3 sm:p-4 border bg-card hover:border-primary/50 transition-all duration-300">
                     <div className="flex items-center justify-between">
@@ -365,7 +363,6 @@ function CourseContent({ lesson, onVideoEnd, updateSidebarCompletion }) {
                     </Button>
                   </div>
                 </div>
-
                 {/* Próximas Atividades */}
                 <div>
                   <div className="flex items-center justify-between mb-4">
@@ -440,7 +437,6 @@ function CourseContent({ lesson, onVideoEnd, updateSidebarCompletion }) {
                   </div>
                 </div>
               </div>
-
               {/* Cards Inferiores */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                 <div className="group p-4 rounded-lg border bg-card text-card-foreground hover:border-primary/50 transition-all duration-300">
@@ -593,7 +589,7 @@ function CourseContent({ lesson, onVideoEnd, updateSidebarCompletion }) {
                 />
               ) : (
                 <PandaVideo
-                  videoUrl={lesson.videoUrl}
+                  videoUrl={videoUrl}
                   onVideoEnd={() => handleVideoEnd()}
                   width="100%"
                   height="100%"

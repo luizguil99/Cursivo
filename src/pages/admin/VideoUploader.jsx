@@ -1,28 +1,32 @@
-import React, { useState, useRef } from 'react';
-import * as tus from 'tus-js-client';
+import React, { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Upload, CheckCircle2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const VideoUploader = () => {
+const VideoUploader = ({ onUploadComplete }) => {
   const [file, setFile] = useState(null);
   const [progress, setProgress] = useState(0);
-  const [status, setStatus] = useState('idle'); // idle, uploading, success, error
-  const [uploadUrl, setUploadUrl] = useState('');
+  const [status, setStatus] = useState("idle");
+  const [uploadUrl, setUploadUrl] = useState("");
   const uploadRef = useRef(null);
 
-  // Função para codificar em base64
   const toBase64 = (str) => {
     return btoa(str);
+  };
+
+  const formatMetadata = (metadata) => {
+    return Object.entries(metadata)
+      .map(([key, value]) => `${key} ${value}`)
+      .join(",");
   };
 
   const handleFileSelect = (event) => {
     const selectedFile = event.target.files[0];
     if (selectedFile) {
       setFile(selectedFile);
-      setStatus('idle');
+      setStatus("idle");
       setProgress(0);
     }
   };
@@ -30,65 +34,96 @@ const VideoUploader = () => {
   const startUpload = async () => {
     if (!file) return;
 
-    setStatus('uploading');
+    setStatus("uploading");
     setProgress(0);
 
     try {
-      // Configuração do upload
-      const upload = new tus.Upload(file, {
-        endpoint: "https://uploader-us01.pandavideo.com.br/files",
-        retryDelays: [0, 3000, 5000, 10000, 20000],
-        metadata: {
-          filename: file.name,
-          // Substitua YOUR_API_KEY pela sua chave da API do Panda Video
-          authorization: toBase64('panda-b71c9560d252c520191cd3b857017cc0997a6b85359f60f4e1d4979ee2d15594'),
-        },
+      const metadata = {
+        filename: toBase64(file.name),
+        authorization: toBase64(
+          "panda-b71c9560d252c520191cd3b857017cc0997a6b85359f60f4e1d4979ee2d15594"
+        ),
+      };
+
+      const uploadUrl = "https://uploader-us01.pandavideo.com.br/files";
+      const response = await fetch(uploadUrl, {
+        method: "POST",
         headers: {
-          'Tus-Resumable': '1.0.0',
-        },
-        onError: (error) => {
-          console.error('Erro no upload:', error);
-          setStatus('error');
-        },
-        onProgress: (bytesUploaded, bytesTotal) => {
-          const percentage = ((bytesUploaded / bytesTotal) * 100).toFixed(2);
-          setProgress(parseFloat(percentage));
-        },
-        onSuccess: () => {
-          console.log('Upload concluído!');
-          setStatus('success');
-          setUploadUrl(upload.url);
+          "Tus-Resumable": "1.0.0",
+          "Upload-Length": file.size,
+          "Upload-Metadata": formatMetadata(metadata),
         },
       });
 
-      // Inicia o upload
-      upload.start();
-      uploadRef.current = upload;
+      if (!response.ok) {
+        const responseText = await response.text();
+        console.log("Erro ao criar upload:", responseText);
+        setStatus("error");
+        throw new Error(
+          `Erro ao criar upload: ${response.status} ${responseText}`
+        );
+      }
 
+      const location = response.headers.get("Location");
+      if (!location) {
+        throw new Error(
+          "URL de upload não encontrada no cabeçalho da resposta."
+        );
+      }
+      setUploadUrl(location);
+
+      let bytesUploaded = 0;
+      const chunkSize = 2 * 1024 * 1024;
+      while (bytesUploaded < file.size) {
+        const chunk = file.slice(bytesUploaded, bytesUploaded + chunkSize);
+        const response = await fetch(location, {
+          method: "PATCH",
+          headers: {
+            "Tus-Resumable": "1.0.0",
+            "Upload-Offset": bytesUploaded,
+            "Content-Type": "application/offset+octet-stream",
+          },
+          body: chunk,
+        });
+
+        if (!response.ok) {
+          const responseText = await response.text();
+          console.log("Erro ao enviar chunk:", responseText);
+          setStatus("error");
+          throw new Error(
+            `Erro ao enviar chunk: ${response.status} ${responseText}`
+          );
+        }
+
+        bytesUploaded += chunk.size;
+        const percentage = ((bytesUploaded / file.size) * 100).toFixed(2);
+        setProgress(parseFloat(percentage));
+      }
+
+      setStatus("success");
+      onUploadComplete(location);
     } catch (error) {
-      console.error('Erro ao iniciar upload:', error);
-      setStatus('error');
+      console.error("Erro ao iniciar upload:", error);
+      setStatus("error");
     }
   };
 
   const cancelUpload = () => {
-    if (uploadRef.current) {
-      uploadRef.current.abort();
-      setStatus('idle');
-      setProgress(0);
-    }
+    // não tem como cancelar utilizando fetch.
+    setStatus("idle");
+    setProgress(0);
   };
 
   return (
     <div className="w-full max-w-md mx-auto p-4 space-y-4">
       <div className="text-2xl font-bold mb-4">Upload de Vídeo</div>
-      
+
       <div className="space-y-4">
         <Input
           type="file"
           accept="video/*"
           onChange={handleFileSelect}
-          disabled={status === 'uploading'}
+          disabled={status === "uploading"}
           className="w-full"
         />
 
@@ -98,7 +133,7 @@ const VideoUploader = () => {
           </div>
         )}
 
-        {status === 'uploading' && (
+        {status === "uploading" && (
           <div className="space-y-2">
             <Progress value={progress} className="w-full" />
             <div className="text-sm text-gray-600">
@@ -110,18 +145,18 @@ const VideoUploader = () => {
         <div className="flex gap-2">
           <Button
             onClick={startUpload}
-            disabled={!file || status === 'uploading' || status === 'success'}
+            disabled={!file || status === "uploading" || status === "success"}
             className={cn(
               "w-full",
-              status === 'success' && "bg-green-500 hover:bg-green-600"
+              status === "success" && "bg-green-500 hover:bg-green-600"
             )}
           >
-            {status === 'uploading' ? (
+            {status === "uploading" ? (
               <>
                 <Upload className="w-4 h-4 mr-2 animate-bounce" />
                 Enviando...
               </>
-            ) : status === 'success' ? (
+            ) : status === "success" ? (
               <>
                 <CheckCircle2 className="w-4 h-4 mr-2" />
                 Concluído!
@@ -134,7 +169,7 @@ const VideoUploader = () => {
             )}
           </Button>
 
-          {status === 'uploading' && (
+          {status === "uploading" && (
             <Button
               variant="destructive"
               onClick={cancelUpload}
@@ -145,14 +180,14 @@ const VideoUploader = () => {
           )}
         </div>
 
-        {status === 'error' && (
+        {status === "error" && (
           <div className="flex items-center gap-2 text-red-500">
             <AlertCircle className="w-4 h-4" />
             <span>Erro no upload. Tente novamente.</span>
           </div>
         )}
 
-        {status === 'success' && uploadUrl && (
+        {status === "success" && uploadUrl && (
           <div className="mt-4 p-4 bg-green-50 rounded-lg border border-green-200">
             <div className="font-semibold text-green-700 mb-2">
               URL do vídeo:
