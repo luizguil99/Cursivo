@@ -1,47 +1,47 @@
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import {
-  Home,
-  Users,
   MessageSquare,
-  Bookmark,
+  Users,
+  MessagesSquare,
   Settings,
-  TrendingUp,
   HelpCircle,
 } from "lucide-react";
 
 const menuItems = [
   {
-    icon: Home,
-    label: "Home",
-    path: "/courses",
-  },
-  {
-    icon: Users,
-    label: "Meus Grupos",
-    path: "/community/groups",
-  },
-  {
     icon: MessageSquare,
-    label: "Discussões",
+    label: "Publicações",
+    path: "/community",
+  },
+  {
+    icon: MessagesSquare,
+    label: "Chat em Tempo Real",
     path: "/community/discussions",
   },
   {
-    icon: Bookmark,
-    label: "Salvos",
-    path: "/community/saved",
+    icon: Users,
+    label: "Grupos",
+    path: "/community/groups",
   },
   {
-    icon: TrendingUp,
-    label: "Tendências",
-    path: "/community/trending",
+    icon: HelpCircle,
+    label: "Ajuda",
+    path: "/community/help",
+  },
+  {
+    icon: Settings,
+    label: "Configurações",
+    path: "/community/settings",
   },
 ];
 
 const CommunitySidebar = () => {
+  const location = useLocation();
+
   return (
     <div className="h-screen w-64 border-r border-border bg-background">
       <ScrollArea className="h-full px-4 py-6">
@@ -57,7 +57,7 @@ const CommunitySidebar = () => {
             {menuItems.map((item) => (
               <Link key={item.path} to={item.path}>
                 <Button
-                  variant="ghost"
+                  variant={location.pathname === item.path ? "secondary" : "ghost"}
                   className="w-full justify-start gap-2"
                 >
                   <item.icon className="h-4 w-4" />
@@ -67,16 +67,6 @@ const CommunitySidebar = () => {
             ))}
           </nav>
           <Separator />
-          <div className="space-y-2">
-            <Button variant="ghost" className="w-full justify-start gap-2">
-              <Settings className="h-4 w-4" />
-              <span className="text-foreground">Configurações</span>
-            </Button>
-            <Button variant="ghost" className="w-full justify-start gap-2">
-              <HelpCircle className="h-4 w-4" />
-              <span className="text-foreground">Ajuda</span>
-            </Button>
-          </div>
         </div>
       </ScrollArea>
     </div>
