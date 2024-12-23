@@ -1,6 +1,6 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
-import { CalendarDays, Plus } from "lucide-react";
+import { CalendarDays, Plus, ChevronLeft, ChevronRight } from "lucide-react";
 import WeekDay from "./WeekDay";
 import { supabase } from "@/lib/supabase";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -38,6 +38,16 @@ function WeeklySchedule({ onClose }) {
   const [subjects, setSubjects] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [draggedItem, setDraggedItem] = React.useState(null);
+  const [currentDayIndex, setCurrentDayIndex] = React.useState(0);
+
+  // Funções de navegação para dispositivos móveis
+  const goToPreviousDay = () => {
+    setCurrentDayIndex((prev) => (prev === 0 ? weekDays.length - 1 : prev - 1));
+  };
+
+  const goToNextDay = () => {
+    setCurrentDayIndex((prev) => (prev === weekDays.length - 1 ? 0 : prev + 1));
+  };
 
   React.useEffect(() => {
     if (currentUser?.id) {
@@ -224,12 +234,13 @@ function WeeklySchedule({ onClose }) {
   return (
     <div className="p-4 h-full">
       <div className="h-full flex flex-col max-w-[1400px] mx-auto">
-        <div className="flex items-center justify-between mb-6 pr-16">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6 pr-4 md:pr-16">
           <div className="flex items-center gap-3">
             <CalendarDays className="h-6 w-6 text-[#F3C92C]" />
             <h2 className="text-xl font-bold">Cronograma Semanal</h2>
           </div>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="ghost" onClick={onClose} className="text-sm md:text-base">
             Voltar
           </Button>
         </div>
@@ -241,17 +252,21 @@ function WeeklySchedule({ onClose }) {
                 <Skeleton key={i} className="h-10 w-32" />
               ))}
             </div>
-            <div className="grid grid-cols-7 gap-4">
+            <div className="hidden md:grid md:grid-cols-7 gap-4">
               {weekDays.map((day) => (
                 <Skeleton key={day.id} className="h-[200px]" />
               ))}
             </div>
+            <div className="md:hidden">
+              <Skeleton className="h-[400px]" />
+            </div>
           </div>
         ) : (
           <>
+            {/* Botões de matérias */}
             <div className="mb-6 flex gap-2 flex-wrap">
               {subjects.length === 0 ? (
-                <p className="text-muted-foreground">
+                <p className="text-muted-foreground text-sm">
                   Nenhuma matéria encontrada.
                 </p>
               ) : (
@@ -260,38 +275,39 @@ function WeeklySchedule({ onClose }) {
                     <Button
                       key={subject.id}
                       variant="outline"
-                      className="flex items-center gap-2"
-                      onClick={() => handleAddSubject("monday", subject)}
+                      className="flex items-center gap-2 text-xs md:text-sm"
+                      onClick={() => handleAddSubject(weekDays[currentDayIndex].id, subject)}
                       style={{
                         borderColor: subject.color,
                         color: subject.color,
                         borderWidth: "2px",
                       }}
                     >
-                      <Plus className="h-4 w-4" />
+                      <Plus className="h-3 w-3 md:h-4 md:w-4" />
                       {subject.name}
                     </Button>
                   ))}
                   <Button
                     variant="outline"
-                    className="flex items-center gap-2 border-gray-500 text-gray-500 border-2"
+                    className="flex items-center gap-2 border-gray-500 text-gray-500 border-2 text-xs md:text-sm"
                     onClick={() => {
                       const customBlock = {
                         name: "Bloco Personalizado",
                         color: "#808080",
                         duration: "1h",
                       };
-                      handleAddSubject("monday", customBlock);
+                      handleAddSubject(weekDays[currentDayIndex].id, customBlock);
                     }}
                   >
-                    <Plus className="h-4 w-4" />
+                    <Plus className="h-3 w-3 md:h-4 md:w-4" />
                     Adicionar Bloco
                   </Button>
                 </>
               )}
             </div>
 
-            <div className="grid grid-cols-7 gap-4 min-h-[500px] overflow-hidden">
+            {/* Visualização Desktop */}
+            <div className="hidden md:grid md:grid-cols-7 gap-4 min-h-[500px] overflow-hidden">
               {weekDays.map((day) => (
                 <div
                   key={day.id}
@@ -313,6 +329,51 @@ function WeeklySchedule({ onClose }) {
                   </div>
                 </div>
               ))}
+            </div>
+
+            {/* Visualização Mobile */}
+            <div className="md:hidden">
+              <div className="flex items-center justify-between mb-4">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={goToPreviousDay}
+                  className="p-2"
+                >
+                  <ChevronLeft className="h-6 w-6" />
+                </Button>
+                <h3 className="font-medium text-lg">
+                  {weekDays[currentDayIndex].name}
+                </h3>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={goToNextDay}
+                  className="p-2"
+                >
+                  <ChevronRight className="h-6 w-6" />
+                </Button>
+              </div>
+
+              <div
+                className="flex flex-col bg-card rounded-lg border min-h-[400px]"
+                onDragOver={handleDragOver}
+                onDrop={(e) => handleDrop(e, weekDays[currentDayIndex].id)}
+              >
+                <div className="flex-1 p-4">
+                  <WeekDay
+                    items={schedule[weekDays[currentDayIndex].id]}
+                    onDragStart={(e, item) =>
+                      handleDragStart(e, item, weekDays[currentDayIndex].id)
+                    }
+                    onDragEnd={handleDragEnd}
+                    onDelete={(blockId) =>
+                      handleDeleteBlock(blockId, weekDays[currentDayIndex].id)
+                    }
+                    onEdit={handleEditBlock}
+                  />
+                </div>
+              </div>
             </div>
           </>
         )}

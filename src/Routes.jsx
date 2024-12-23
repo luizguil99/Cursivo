@@ -8,6 +8,7 @@ import Performance from "@/pages/Performance";
 import AdminDashboard from "@/pages/admin/Dashboard";
 import AdminStudents from "@/pages/admin/Students";
 import AdminQuestions from "@/pages/admin/Questions";
+import AdminNotifications from "@/pages/admin/Notifications";
 import ManageCourses from "@/pages/admin/ManageCourses";
 import ResetPassword from "@/pages/ResetPassword";
 import UpdatePassword from "@/pages/UpdatePassword";
@@ -56,6 +57,7 @@ export default function Routes() {
       <Route path="/admin/students" element={<AdminStudents />} />
       <Route path="/admin/questions" element={<AdminQuestions />} />
       <Route path="/admin/manage-courses" element={<ManageCourses />} />
+      <Route path="/admin/notifications" element={<AdminNotifications />} />
     </RouterRoutes>
   );
 }

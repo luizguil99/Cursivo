@@ -27,6 +27,7 @@ function Sidebar({ onCourseSelect, onScheduleClick, onModuleSidebarToggle }) {
   const [collapsed, setCollapsed] = React.useState(false);
   const [showCourses, setShowCourses] = React.useState(false);
   const [showMobileMenu, setShowMobileMenu] = React.useState(false);
+  const [showSchedule, setShowSchedule] = React.useState(false);
   const navigate = useNavigate();
   const { logout } = useAuth();
   const { theme } = useTheme();
@@ -65,11 +66,16 @@ function Sidebar({ onCourseSelect, onScheduleClick, onModuleSidebarToggle }) {
       icon: <Home className="h-5 w-5" />,
       label: "Home",
       onClick: () => {
-        onCourseSelect(null);
-        navigate("/courses", {
-          replace: true,
-          state: { showExplore: true },
-        });
+        if (showSchedule) {
+          setShowSchedule(false);
+          onScheduleClick();
+        } else {
+          onCourseSelect(null);
+          navigate("/courses", {
+            replace: true,
+            state: { showExplore: true },
+          });
+        }
       },
     },
     {
@@ -80,7 +86,10 @@ function Sidebar({ onCourseSelect, onScheduleClick, onModuleSidebarToggle }) {
     {
       icon: <CalendarDays className="h-5 w-5" />,
       label: "Cronograma",
-      onClick: onScheduleClick,
+      onClick: () => {
+        setShowSchedule(true);
+        onScheduleClick();
+      },
     },
     {
       icon: <BookOpen className="h-5 w-5" />,
@@ -201,14 +210,14 @@ function Sidebar({ onCourseSelect, onScheduleClick, onModuleSidebarToggle }) {
         </div>
 
         {/* Course List */}
-        {showCourses && !collapsed && (
-          <>
-            <Separator className="my-1.5 sm:my-2" />
-            <div className="transition-all duration-300">
-              <CourseList onCourseSelect={handleCourseSelect} />
-            </div>
-          </>
-        )}
+        <div className={cn(
+          "transition-all duration-300 overflow-hidden",
+          showCourses && !collapsed ? "opacity-100 h-auto" : "opacity-0 h-0"
+        )}>
+          <Separator className="my-1.5 sm:my-2" />
+          <CourseList onCourseSelect={handleCourseSelect} />
+        </div>
+
       </div>
 
       {/* Logout Button */}

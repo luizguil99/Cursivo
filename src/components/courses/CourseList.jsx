@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import CourseListItem from "./CourseListItem";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
@@ -56,85 +56,85 @@ function CourseList({ onCourseSelect }) {
     }
   };
 
-  useEffect(() => {
-    const fetchCourses = async () => {
-      // Check if we have valid cached data
-      const now = Date.now();
-      if (
-        coursesCache.data &&
-        coursesCache.lastFetch &&
-        now - coursesCache.lastFetch < coursesCache.expirationTime
-      ) {
-        setCourses(coursesCache.data);
-        setLoading(false);
-        return;
-      }
+  // Memoize the fetchCourses function
+  const fetchCourses = useMemo(() => async () => {
+    // Check if we have valid cached data
+    const now = Date.now();
+    if (
+      coursesCache.data &&
+      coursesCache.lastFetch &&
+      now - coursesCache.lastFetch < coursesCache.expirationTime
+    ) {
+      setCourses(coursesCache.data);
+      setLoading(false);
+      return;
+    }
 
-      try {
-        // Primeiro, verifica se precisa inicializar os cursos
-        await initializeCoursesIfNeeded();
+    try {
+      // Primeiro, verifica se precisa inicializar os cursos
+      await initializeCoursesIfNeeded();
 
-        // Buscar cursos
-        const { data: coursesData, error: coursesError } = await supabase
-          .from("cursos")
-          .select("*");
+      // Buscar cursos
+      const { data: coursesData, error: coursesError } = await supabase
+        .from("cursos")
+        .select("*");
 
-        if (coursesError) throw coursesError;
+      if (coursesError) throw coursesError;
 
-        console.log("Cursos carregados:", coursesData);
+      // Buscar progresso do usuário se estiver logado
+      if (currentUser) {
+        const { data: progressData, error: progressError } = await supabase
+          .from("progresso_usuario")
+          .select("*")
+          .eq("usuario_id", currentUser.id);
 
-        // Buscar progresso do usuário se estiver logado
-        if (currentUser) {
-          const { data: progressData, error: progressError } = await supabase
-            .from("progresso_usuario")
-            .select("*")
-            .eq("usuario_id", currentUser.id);
+        if (progressError) throw progressError;
 
-          if (progressError) throw progressError;
-
-          // Calcular progresso para cada curso
-          const coursesWithProgress = coursesData.map((course) => {
-            const userProgress = progressData?.find(
-              (p) => p.curso_id === course.id
-            );
-            return {
-              id: course.id,
-              name: course.titulo,
-              description: course.descricao,
-              progress: userProgress?.progresso || 0,
-            };
-          });
-
-          // Update cache
-          coursesCache.data = coursesWithProgress;
-          coursesCache.lastFetch = now;
-
-          setCourses(coursesWithProgress);
-        } else {
-          // Se não estiver logado, mostrar cursos sem progresso
-          const coursesWithoutProgress = coursesData.map((course) => ({
+        // Calcular progresso para cada curso
+        const coursesWithProgress = coursesData.map((course) => {
+          const userProgress = progressData?.find(
+            (p) => p.curso_id === course.id
+          );
+          return {
             id: course.id,
             name: course.titulo,
             description: course.descricao,
-            progress: 0,
-          }));
+            progress: userProgress?.progresso || 0,
+          };
+        });
 
-          // Update cache
-          coursesCache.data = coursesWithoutProgress;
-          coursesCache.lastFetch = now;
+        // Update cache
+        coursesCache.data = coursesWithProgress;
+        coursesCache.lastFetch = now;
 
-          setCourses(coursesWithoutProgress);
-        }
-      } catch (error) {
-        console.error("Erro ao buscar cursos:", error);
-        setError(error.message);
-      } finally {
-        setLoading(false);
+        setCourses(coursesWithProgress);
+      } else {
+        // Se não estiver logado, mostrar cursos sem progresso
+        const coursesWithoutProgress = coursesData.map((course) => ({
+          id: course.id,
+          name: course.titulo,
+          description: course.descricao,
+          progress: 0,
+        }));
+
+        // Update cache
+        coursesCache.data = coursesWithoutProgress;
+        coursesCache.lastFetch = now;
+
+        setCourses(coursesWithoutProgress);
       }
-    };
+    } catch (error) {
+      console.error("Erro ao buscar cursos:", error);
+      setError(error.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [currentUser]); // Only recreate if currentUser changes
 
+  // Fetch courses only when component mounts or currentUser changes
+  useEffect(() => {
     fetchCourses();
-  }, [currentUser, initializeCoursesIfNeeded]);
+  }, [fetchCourses]);
 
   if (error) {
     return (

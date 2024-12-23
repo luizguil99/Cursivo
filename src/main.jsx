@@ -15,6 +15,7 @@ import { ThemeProvider } from "./components/theme-provider";
 import AdminDashboard from "./pages/admin/Dashboard";
 import AdminStudents from "./pages/admin/Students";
 import AdminQuestions from "./pages/admin/Questions";
+import AdminNotifications from "./pages/admin/Notifications";
 import ManageCourses from "./pages/admin/ManageCourses";
 import { AccessProvider } from "./contexts/AccessContext";
 import AccessDenied from "./pages/AccessDenied";
@@ -159,6 +160,16 @@ createRoot(document.getElementById("root")).render(
                     <PrivateRoute>
                       <AdminRoute>
                         <AdminQuestions />
+                      </AdminRoute>
+                    </PrivateRoute>
+                  }
+                />
+                <Route
+                  path="/admin/notifications"
+                  element={
+                    <PrivateRoute>
+                      <AdminRoute>
+                        <AdminNotifications />
                       </AdminRoute>
                     </PrivateRoute>
                   }

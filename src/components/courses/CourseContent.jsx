@@ -15,6 +15,11 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
 import VimeoPlayer from "./VimeoPlayer";
 import PandaVideo from "@/components/ui/panda-video";
+import { 
+  getNotificationsFromCache, 
+  setNotificationsCache, 
+  invalidateNotificationsCache 
+} from "@/lib/notificationsCache";
 
 function CourseContent({ lesson, onVideoEnd, updateSidebarCompletion }) {
   const navigate = useNavigate();
@@ -23,6 +28,79 @@ function CourseContent({ lesson, onVideoEnd, updateSidebarCompletion }) {
   const [isLoading, setIsLoading] = useState(true);
   const [currentVideoId, setCurrentVideoId] = useState(null);
   const [isChangingLesson, setIsChangingLesson] = useState(false);
+  const [notifications, setNotifications] = useState(() => getNotificationsFromCache() || []);
+
+  // Buscar notificações do Supabase
+  useEffect(() => {
+    const fetchNotifications = async () => {
+      // Verificar cache
+      const cachedData = getNotificationsFromCache();
+      if (cachedData) {
+        setNotifications(cachedData);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from("notificacoes")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(3);
+
+        if (error) throw error;
+
+        // Atualizar cache global
+        setNotificationsCache(data || []);
+        setNotifications(data || []);
+      } catch (error) {
+        console.error("Erro ao buscar notificações:", error);
+      }
+    };
+
+    fetchNotifications();
+
+    // Configurar subscription para atualizações em tempo real
+    const subscription = supabase
+      .channel("notificacoes_changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "notificacoes",
+        },
+        () => {
+          // Força atualização do cache quando receber nova notificação
+          invalidateNotificationsCache();
+          fetchNotifications();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  // Função para formatar o tempo relativo
+  const formatRelativeTime = (dateString) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInSeconds = Math.floor((now - date) / 1000);
+
+    if (diffInSeconds < 60) {
+      return "Agora mesmo";
+    } else if (diffInSeconds < 3600) {
+      const minutes = Math.floor(diffInSeconds / 60);
+      return `Há ${minutes} ${minutes === 1 ? "minuto" : "minutos"}`;
+    } else if (diffInSeconds < 86400) {
+      const hours = Math.floor(diffInSeconds / 3600);
+      return `Há ${hours} ${hours === 1 ? "hora" : "horas"}`;
+    } else {
+      const days = Math.floor(diffInSeconds / 86400);
+      return `Há ${days} ${days === 1 ? "dia" : "dias"}`;
+    }
+  };
 
   // Debug do usuário
   useEffect(() => {
@@ -494,65 +572,41 @@ function CourseContent({ lesson, onVideoEnd, updateSidebarCompletion }) {
                     Notificações
                   </h2>
                   <span className="px-2 py-1 text-xs font-medium bg-[#F3C92C] text-background rounded-full">
-                    3 novas
+                    {notifications.length}{" "}
+                    {notifications.length === 1 ? "nova" : "novas"}
                   </span>
                 </div>
                 <div className="space-y-3 sm:space-y-4">
-                  <div className="group border-l-2 border-[#F3C92C] pl-3 sm:pl-4 py-2 hover:bg-primary/5 rounded-r-lg transition-colors">
-                    <div className="flex items-center gap-2 mb-1">
-                      <p className="text-sm font-medium">
-                        Nova aula disponível
-                      </p>
-                      <span className="px-2 py-0.5 text-xs bg-primary/10 text-primary rounded-full">
-                        Novo
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      História Medieval - Módulo 2
-                    </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <Clock className="h-3 w-3 text-muted-foreground" />
+                  {notifications.map((notification) => (
+                    <div
+                      key={notification.id}
+                      className="group border-l-2 border-[#F3C92C] pl-3 sm:pl-4 py-2 hover:bg-primary/5 rounded-r-lg transition-colors"
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className="text-sm font-medium">
+                          {notification.title}
+                        </p>
+                        {notification.grade ? (
+                          <span className="px-2 py-0.5 text-xs border border-primary/20 text-primary rounded-full">
+                            Nota: {notification.grade}
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 text-xs bg-primary/10 text-primary rounded-full">
+                            {notification.type || "Novo"}
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-muted-foreground">
-                        Há 2 horas
+                        {notification.message}
                       </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Clock className="h-3 w-3 text-muted-foreground" />
+                        <p className="text-xs text-muted-foreground">
+                          {formatRelativeTime(notification.created_at)}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-
-                  <div className="group border-l-2 border-[#F3C92C] pl-3 sm:pl-4 py-2 hover:bg-primary/5 rounded-r-lg transition-colors">
-                    <div className="flex items-center gap-2 mb-1">
-                      <p className="text-sm font-medium">Exercício corrigido</p>
-                      <span className="px-2 py-0.5 text-xs border border-primary/20 text-primary rounded-full">
-                        Nota: 9.5
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Matemática - Álgebra Linear
-                    </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <Clock className="h-3 w-3 text-muted-foreground" />
-                      <p className="text-xs text-muted-foreground">
-                        Há 5 horas
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="group border-l-2 border-[#F3C92C] pl-3 sm:pl-4 py-2 hover:bg-primary/5 rounded-r-lg transition-colors">
-                    <div className="flex items-center gap-2 mb-1">
-                      <p className="text-sm font-medium">
-                        Novo curso disponível
-                      </p>
-                      <span className="px-2 py-0.5 text-xs bg-primary/10 text-primary rounded-full">
-                        Curso
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Literatura Brasileira
-                    </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <Clock className="h-3 w-3 text-muted-foreground" />
-                      <p className="text-xs text-muted-foreground">Há 1 dia</p>
-                    </div>
-                  </div>
+                  ))}
                 </div>
 
                 <button
@@ -571,91 +625,96 @@ function CourseContent({ lesson, onVideoEnd, updateSidebarCompletion }) {
   }
 
   return (
-    <div className="h-full overflow-y-auto bg-background">
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 px-4 md:px-6 lg:px-8">
-        <div className="lg:col-start-2 lg:col-span-10 xl:col-start-3 xl:col-span-8 p-4 md:p-6 space-y-4 md:space-y-6">
-          <h1 className="text-xl md:text-2xl font-bold">{lesson.title}</h1>
+    <div className="grid lg:grid-cols-12 h-full">
+      {/* Conteúdo Principal */}
+      <div className="lg:col-span-9 2xl:col-span-10 h-full overflow-y-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 px-4 md:px-6 lg:px-8">
+          <div className="lg:col-start-2 lg:col-span-10 xl:col-start-3 xl:col-span-8 p-4 md:p-6 space-y-4 md:space-y-6">
+            <h1 className="text-xl md:text-2xl font-bold">{lesson.title}</h1>
 
-          <div
-            className="relative rounded-lg overflow-hidden bg-black w-full max-w-4xl mx-auto"
-            style={{ boxShadow: "0 4px 20px rgba(243, 201, 44, 0.2)" }}
-          >
-            <div className="aspect-video relative">
-              {isVimeoVideo && vimeoId ? (
-                <VimeoPlayer
-                  videoId={vimeoId}
-                  onVideoEnd={() => handleVideoEnd()}
-                  lessonId={lesson.id}
-                />
-              ) : (
-                <PandaVideo
-                  videoUrl={videoUrl}
-                  onVideoEnd={() => handleVideoEnd()}
-                  width="100%"
-                  height="100%"
-                />
-              )}
-              {isChangingLesson && (
-                <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                  <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 flex items-center gap-2 text-white">
-                    <div className="w-4 h-4 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" />
-                    <span>Próxima aula</span>
-                    <ArrowRight className="w-4 h-4 text-yellow-400 animate-pulse" />
+            <div
+              className="relative rounded-lg overflow-hidden bg-black w-full max-w-4xl mx-auto"
+              style={{ boxShadow: "0 4px 20px rgba(243, 201, 44, 0.2)" }}
+            >
+              <div className="aspect-video relative">
+                {isVimeoVideo && vimeoId ? (
+                  <VimeoPlayer
+                    videoId={vimeoId}
+                    onVideoEnd={() => handleVideoEnd()}
+                    lessonId={lesson.id}
+                  />
+                ) : (
+                  <PandaVideo
+                    videoUrl={videoUrl}
+                    onVideoEnd={() => handleVideoEnd()}
+                    width="100%"
+                    height="100%"
+                  />
+                )}
+                {isChangingLesson && (
+                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                    <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 flex items-center gap-2 text-white">
+                      <div className="w-4 h-4 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" />
+                      <span>Próxima aula</span>
+                      <ArrowRight className="w-4 h-4 text-yellow-400 animate-pulse" />
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="prose max-w-none">
-            <p className="text-sm md:text-base text-muted-foreground whitespace-pre-line">
-              {lesson.description}
-            </p>
-          </div>
-
-          {Array.isArray(lesson.resources) && lesson.resources.length > 0 && (
-            <div className="space-y-3">
-              <h3 className="text-base md:text-lg font-semibold">
-                Material Complementar
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-full">
-                {lesson.resources.map((resource) => (
-                  <Button
-                    key={`${resource.name}-${resource.url}`}
-                    variant="outline"
-                    className="w-full justify-start h-10 md:h-12"
-                    onClick={() => window.open(resource.url, "_blank")}
-                  >
-                    <Download
-                      className="mr-2 h-3 w-3 md:h-4 md:w-4"
-                      aria-hidden="true"
-                    />
-                    <span className="text-xs md:text-sm">{resource.name}</span>
-                  </Button>
-                ))}
+                )}
               </div>
             </div>
-          )}
 
-          {lesson.nextLesson && (
-            <div className="pt-4">
-              <Button
-                className="w-full sm:w-auto flex items-center gap-2"
-                style={{
-                  background:
-                    "linear-gradient(90deg, #B4902A -158.27%, #F3C92C 108.81%)",
-                  border: "none",
-                }}
-                onClick={() => lesson.onNextLesson()}
-              >
-                <PlayCircle
-                  className="h-3 w-3 md:h-4 md:w-4"
-                  aria-hidden="true"
-                />
-                <span className="text-xs md:text-sm">Próxima Aula</span>
-              </Button>
+            <div className="prose max-w-none">
+              <p className="text-sm md:text-base text-muted-foreground whitespace-pre-line">
+                {lesson.description}
+              </p>
             </div>
-          )}
+
+            {Array.isArray(lesson.resources) && lesson.resources.length > 0 && (
+              <div className="space-y-3">
+                <h3 className="text-base md:text-lg font-semibold">
+                  Material Complementar
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-full">
+                  {lesson.resources.map((resource) => (
+                    <Button
+                      key={`${resource.name}-${resource.url}`}
+                      variant="outline"
+                      className="w-full justify-start h-10 md:h-12"
+                      onClick={() => window.open(resource.url, "_blank")}
+                    >
+                      <Download
+                        className="mr-2 h-3 w-3 md:h-4 md:w-4"
+                        aria-hidden="true"
+                      />
+                      <span className="text-xs md:text-sm">
+                        {resource.name}
+                      </span>
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {lesson.nextLesson && (
+              <div className="pt-4">
+                <Button
+                  className="w-full sm:w-auto flex items-center gap-2"
+                  style={{
+                    background:
+                      "linear-gradient(90deg, #B4902A -158.27%, #F3C92C 108.81%)",
+                    border: "none",
+                  }}
+                  onClick={() => lesson.onNextLesson()}
+                >
+                  <PlayCircle
+                    className="h-3 w-3 md:h-4 md:w-4"
+                    aria-hidden="true"
+                  />
+                  <span className="text-xs md:text-sm">Próxima Aula</span>
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

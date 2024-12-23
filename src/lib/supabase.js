@@ -371,9 +371,9 @@ export const getUserAvatar = (user) => {
 export const getScheduleBlocks = async (userId) => {
   try {
     const { data, error } = await supabase
-      .from('schedule_blocks')
-      .select('*')
-      .eq('user_id', userId);
+      .from("schedule_blocks")
+      .select("*")
+      .eq("user_id", userId);
 
     if (error) throw error;
 
@@ -388,20 +388,20 @@ export const getScheduleBlocks = async (userId) => {
       sunday: [],
     };
 
-    data.forEach(block => {
+    data.forEach((block) => {
       if (schedule[block.day_id]) {
         schedule[block.day_id].push({
           id: block.id,
           name: block.name,
           duration: block.duration,
-          color: block.color
+          color: block.color,
         });
       }
     });
 
     return schedule;
   } catch (error) {
-    console.error('Erro ao buscar blocos do cronograma:', error);
+    console.error("Erro ao buscar blocos do cronograma:", error);
     throw error;
   }
 };
@@ -409,21 +409,23 @@ export const getScheduleBlocks = async (userId) => {
 export const addScheduleBlock = async (userId, dayId, block) => {
   try {
     const { data, error } = await supabase
-      .from('schedule_blocks')
-      .insert([{
-        user_id: userId,
-        day_id: dayId,
-        name: block.name,
-        duration: block.duration,
-        color: block.color
-      }])
+      .from("schedule_blocks")
+      .insert([
+        {
+          user_id: userId,
+          day_id: dayId,
+          name: block.name,
+          duration: block.duration,
+          color: block.color,
+        },
+      ])
       .select()
       .single();
 
     if (error) throw error;
     return data;
   } catch (error) {
-    console.error('Erro ao adicionar bloco ao cronograma:', error);
+    console.error("Erro ao adicionar bloco ao cronograma:", error);
     throw error;
   }
 };
@@ -431,20 +433,20 @@ export const addScheduleBlock = async (userId, dayId, block) => {
 export const updateScheduleBlock = async (blockId, block) => {
   try {
     const { data, error } = await supabase
-      .from('schedule_blocks')
+      .from("schedule_blocks")
       .update({
         name: block.name,
         duration: block.duration,
-        color: block.color
+        color: block.color,
       })
-      .eq('id', blockId)
+      .eq("id", blockId)
       .select()
       .single();
 
     if (error) throw error;
     return data;
   } catch (error) {
-    console.error('Erro ao atualizar bloco do cronograma:', error);
+    console.error("Erro ao atualizar bloco do cronograma:", error);
     throw error;
   }
 };
@@ -452,13 +454,13 @@ export const updateScheduleBlock = async (blockId, block) => {
 export const deleteScheduleBlock = async (blockId) => {
   try {
     const { error } = await supabase
-      .from('schedule_blocks')
+      .from("schedule_blocks")
       .delete()
-      .eq('id', blockId);
+      .eq("id", blockId);
 
     if (error) throw error;
   } catch (error) {
-    console.error('Erro ao deletar bloco do cronograma:', error);
+    console.error("Erro ao deletar bloco do cronograma:", error);
     throw error;
   }
 };
@@ -466,16 +468,16 @@ export const deleteScheduleBlock = async (blockId) => {
 export const moveScheduleBlock = async (blockId, newDayId) => {
   try {
     const { data, error } = await supabase
-      .from('schedule_blocks')
+      .from("schedule_blocks")
       .update({ day_id: newDayId })
-      .eq('id', blockId)
+      .eq("id", blockId)
       .select()
       .single();
 
     if (error) throw error;
     return data;
   } catch (error) {
-    console.error('Erro ao mover bloco do cronograma:', error);
+    console.error("Erro ao mover bloco do cronograma:", error);
     throw error;
   }
 };

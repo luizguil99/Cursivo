@@ -193,7 +193,7 @@ function Courses() {
       <div className="flex-1 flex overflow-hidden">
         <Sidebar
           onCourseSelect={handleCourseSelect}
-          onScheduleClick={() => setShowSchedule(true)}
+          onScheduleClick={() => setShowSchedule(!showSchedule)}
         />
         {selectedCourse && (
           <ModulesSidebar
