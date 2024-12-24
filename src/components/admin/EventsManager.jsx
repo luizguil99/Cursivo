@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   Table,
@@ -19,9 +20,19 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Calendar, Users, Plus, Trash2, Edit, Video, VideoOff, MessageSquare } from "lucide-react";
+import {
+  Calendar,
+  Users,
+  Plus,
+  Trash2,
+  Edit,
+  Video,
+  VideoOff,
+  MessageSquare,
+} from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import { supabase } from "@/lib/supabase"; // Certifique-se de que este caminho está correto
+import { supabase } from "@/lib/supabase";
+import { DateTimePicker } from "@/components/ui/date-time-picker";
 
 function EventsManager() {
   const { toast } = useToast();
@@ -29,15 +40,26 @@ function EventsManager() {
   const [events, setEvents] = React.useState([]);
   const [editingEvent, setEditingEvent] = React.useState(null);
   const [isDialogOpen, setIsDialogOpen] = React.useState(false);
-  const [selectedProvider, setSelectedProvider] = React.useState('zoom');
+  const [selectedProvider, setSelectedProvider] = React.useState("zoom");
+
   const [meetConfig, setMeetConfig] = React.useState({
-    title: '',
-    description: '',
-    meet_link: '',
-    start_time: '',
-    end_time: '',
+    title: "",
+    description: "",
+    meet_link: "",
+    start_time: new Date(),
+    end_time: new Date(Date.now() + 60 * 60 * 1000), // Define o fim para 1 hora após o início
   });
 
+  const resetMeetConfig = () => {
+    setMeetConfig({
+      title: "",
+      description: "",
+      meet_link: "",
+      start_time: new Date(),
+      end_time: new Date(Date.now() + 60 * 60 * 1000), // Define o fim para 1 hora após o início
+    });
+    setEditingEvent(null);
+  };
   // Carregar eventos e configuração ao montar o componente
   React.useEffect(() => {
     fetchEvents();
@@ -48,15 +70,15 @@ function EventsManager() {
   const fetchEventsVisibility = async () => {
     try {
       const { data, error } = await supabase
-        .from('configuracoes_globais')
-        .select('valor')
-        .eq('chave', 'mostrar_eventos')
+        .from("configuracoes_globais")
+        .select("valor")
+        .eq("chave", "mostrar_eventos")
         .single();
 
       if (error) throw error;
       setShowEvents(data?.valor ?? true);
     } catch (error) {
-      console.error('Erro ao carregar configuração:', error);
+      console.error("Erro ao carregar configuração:", error);
       toast({
         title: "Erro ao carregar configuração",
         description: "Não foi possível verificar a visibilidade dos eventos.",
@@ -68,18 +90,22 @@ function EventsManager() {
   // Buscar eventos do Supabase
   const fetchEvents = async () => {
     try {
+      // Busca eventos da tabela live_classes
       const { data, error } = await supabase
-        .from('eventos_aovivo')
-        .select('*')
-        .order('created_at', { ascending: false });
+        .from("live_classes")
+        .select("*")
+        .gte("end_time", new Date().toISOString()) // Filtra apenas eventos que ainda não terminaram
+        .order("start_time", { ascending: true });
 
       if (error) throw error;
+
+      // Atualiza o estado com os eventos obtidos
       setEvents(data || []);
     } catch (error) {
-      console.error('Erro ao carregar eventos:', error);
+      console.error("Erro ao carregar eventos:", error);
       toast({
         title: "Erro ao carregar eventos",
-        description: "Não foi possível carregar a lista de eventos.",
+        description: "Não foi possível carregar a lista de eventos ao vivo.",
         variant: "destructive",
       });
     }
@@ -87,55 +113,50 @@ function EventsManager() {
 
   const handleToggleEvents = async (checked) => {
     try {
-      // Atualizar no Supabase
       const { error } = await supabase
-        .from('configuracoes_globais')
+        .from("configuracoes_globais")
         .update({ valor: checked })
-        .eq('chave', 'mostrar_eventos');
+        .eq("chave", "mostrar_eventos");
 
       if (error) throw error;
 
-      // Atualizar estado local
       setShowEvents(checked);
-      
       toast({
         title: checked ? "Eventos ativados" : "Eventos desativados",
-        description: checked 
-          ? "O componente de eventos está visível para todos os usuários" 
+        description: checked
+          ? "O componente de eventos está visível para todos os usuários"
           : "O componente de eventos está oculto para todos os usuários",
       });
     } catch (error) {
-      console.error('Erro ao atualizar visibilidade:', error);
+      console.error("Erro ao atualizar visibilidade:", error);
       toast({
         title: "Erro ao atualizar",
         description: "Não foi possível atualizar a visibilidade dos eventos.",
         variant: "destructive",
       });
-      // Reverter o estado em caso de erro
       setShowEvents(!checked);
     }
   };
 
-  // Função para criar ou atualizar um evento
   const handleSubmitEvent = async (e) => {
     e.preventDefault();
-    const formData = new FormData(e.target);
+
+    // Prepara os dados do evento
     const eventData = {
-      title: formData.get('title'),
-      time: formData.get('time'),
-      max_participants: parseInt(formData.get('maxParticipants')),
-      event_link: formData.get('eventLink') || null,
-      current_participants: editingEvent ? editingEvent.current_participants : 0,
-      is_active: true,
+      title: meetConfig.title,
+      description: meetConfig.description,
+      meet_link: meetConfig.meet_link,
+      start_time: meetConfig.start_time.toISOString(),
+      end_time: meetConfig.end_time.toISOString(),
     };
 
     try {
       if (editingEvent) {
-        // Atualizar evento existente
+        // Atualiza um evento existente
         const { error } = await supabase
-          .from('eventos_aovivo')
+          .from("live_classes")
           .update(eventData)
-          .eq('id', editingEvent.id);
+          .eq("id", editingEvent.id);
 
         if (error) throw error;
 
@@ -144,9 +165,9 @@ function EventsManager() {
           description: "As alterações foram salvas com sucesso",
         });
       } else {
-        // Criar novo evento
+        // Cria um novo evento
         const { error } = await supabase
-          .from('eventos_aovivo')
+          .from("live_classes")
           .insert([eventData]);
 
         if (error) throw error;
@@ -157,12 +178,12 @@ function EventsManager() {
         });
       }
 
-      // Recarregar eventos e resetar estado
+      // Atualiza a lista de eventos e reseta o formulário
       fetchEvents();
-      setEditingEvent(null);
+      resetMeetConfig();
       setIsDialogOpen(false);
     } catch (error) {
-      console.error('Erro ao salvar evento:', error);
+      console.error("Erro ao salvar evento:", error);
       toast({
         title: "Erro ao salvar",
         description: "Ocorreu um erro ao salvar o evento.",
@@ -173,158 +194,82 @@ function EventsManager() {
 
   const handleDeleteEvent = async (eventId) => {
     try {
+      // Confirma com o usuário antes de deletar
+      if (!window.confirm("Tem certeza que deseja excluir esta aula?")) {
+        return;
+      }
+
       const { error } = await supabase
-        .from('eventos_aovivo')
+        .from("live_classes")
         .delete()
-        .eq('id', eventId);
+        .eq("id", eventId);
 
       if (error) throw error;
 
       toast({
-        title: "Evento removido",
-        description: "O evento foi removido com sucesso",
+        title: "Aula excluída",
+        description: "A aula foi removida com sucesso",
       });
 
+      // Atualiza a lista de eventos
       fetchEvents();
     } catch (error) {
-      console.error('Erro ao deletar evento:', error);
+      console.error("Erro ao excluir aula:", error);
       toast({
-        title: "Erro ao remover",
-        description: "Ocorreu um erro ao remover o evento.",
+        title: "Erro ao excluir",
+        description: "Não foi possível excluir a aula.",
         variant: "destructive",
       });
     }
   };
 
-  // Função para formatar a hora para exibição
-  const formatTimeForDisplay = (timeString) => {
-    try {
-      const [hours, minutes] = timeString.split(':');
-      return `${hours}:${minutes}`;
-    } catch (error) {
-      return timeString;
-    }
+  // Função para formatar data e hora
+  const formatDateTime = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleString("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
   };
 
-  // Função para formatar a hora para o input
-  const formatTimeForInput = (timeString) => {
-    try {
-      const [hours, minutes] = timeString.split(':');
-      return `${hours}:${minutes}`;
-    } catch (error) {
-      return timeString;
-    }
-  };
-
-  // Função para criar aula no Google Meet
-  const createMeetClass = async () => {
-    try {
-      // Validações básicas
-      if (!meetConfig.title || !meetConfig.meet_link || !meetConfig.start_time || !meetConfig.end_time) {
-        toast({
-          title: "Campos Obrigatórios",
-          description: "Preencha todos os campos obrigatórios.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Converte as datas para UTC mantendo o horário local
-      const startTime = new Date(meetConfig.start_time);
-      const endTime = new Date(meetConfig.end_time);
-
-      if (endTime <= startTime) {
-        toast({
-          title: "Horário Inválido",
-          description: "O horário de término deve ser posterior ao início.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Formata as datas no formato ISO com o fuso horário correto
-      const formattedStartTime = startTime.toISOString();
-      const formattedEndTime = endTime.toISOString();
-
-      console.log('Criando aula com horários:', {
-        start: formattedStartTime,
-        end: formattedEndTime,
-        localStart: startTime.toLocaleString('pt-BR'),
-        localEnd: endTime.toLocaleString('pt-BR')
-      });
-
-      const { error } = await supabase
-        .from('live_classes')
-        .insert([{
-          title: meetConfig.title,
-          description: meetConfig.description,
-          meet_link: meetConfig.meet_link,
-          start_time: formattedStartTime,
-          end_time: formattedEndTime,
-          created_at: new Date().toISOString(),
-        }]);
-
-      if (error) throw error;
-
-      toast({
-        title: "Aula Criada",
-        description: "A aula do Google Meet foi criada com sucesso!",
-      });
-
-      setIsDialogOpen(false);
-      setMeetConfig({
-        title: '',
-        description: '',
-        meet_link: '',
-        start_time: '',
-        end_time: '',
-      });
-    } catch (error) {
-      console.error('Erro ao criar aula:', error);
-      toast({
-        title: "Erro",
-        description: "Não foi possível criar a aula.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  // Função para alternar entre os provedores
   const handleProviderChange = (provider) => {
     setSelectedProvider(provider);
-    if (provider === 'meet') {
+    if (provider === "meet") {
       setIsDialogOpen(true);
     }
   };
 
   return (
     <div className="space-y-6">
-      {/* Seleção de Provedores de Videoconferência */}
       <Card className="p-6">
-        <h2 className="text-xl font-semibold mb-4">Provedores de Videoconferência</h2>
+        <h2 className="text-xl font-semibold mb-4">
+          Provedores de Videoconferência
+        </h2>
         <div className="flex flex-wrap gap-4">
           <Button
-            variant={selectedProvider === 'zoom' ? 'default' : 'outline'}
+            variant={selectedProvider === "zoom" ? "default" : "outline"}
             className="flex items-center gap-2"
-            onClick={() => handleProviderChange('zoom')}
+            onClick={() => handleProviderChange("zoom")}
           >
             <Video className="w-4 h-4" />
             Zoom
           </Button>
-          
           <Button
-            variant={selectedProvider === 'meet' ? 'default' : 'outline'}
+            variant={selectedProvider === "meet" ? "default" : "outline"}
             className="flex items-center gap-2"
-            onClick={() => handleProviderChange('meet')}
+            onClick={() => handleProviderChange("meet")}
           >
             <MessageSquare className="w-4 h-4" />
             Google Meet
           </Button>
-          
           <Button
-            variant={selectedProvider === 'teams' ? 'default' : 'outline'}
+            variant={selectedProvider === "teams" ? "default" : "outline"}
             className="flex items-center gap-2"
-            onClick={() => handleProviderChange('teams')}
+            onClick={() => handleProviderChange("teams")}
           >
             <Video className="w-4 h-4" />
             Microsoft Teams
@@ -335,7 +280,9 @@ function EventsManager() {
       <Card className="p-4">
         <div className="flex items-center justify-between border-b pb-4 mb-4">
           <div className="space-y-0.5">
-            <Label htmlFor="show-events">Mostrar Eventos</Label>
+            <Label htmlFor="show-events">
+              Mostrar Notificação de Eventos em Comunidade
+            </Label>
             <p className="text-sm text-muted-foreground">
               Ativar/desativar o componente de eventos do dia
             </p>
@@ -346,12 +293,18 @@ function EventsManager() {
             onCheckedChange={handleToggleEvents}
           />
         </div>
-        
+
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-medium">Eventos Ativos</h3>
-          <Dialog open={isDialogOpen && selectedProvider !== 'meet'} onOpenChange={setIsDialogOpen}>
+          <h3 className="text-lg font-medium">Próximos Eventos</h3>
+          <Dialog
+            open={isDialogOpen && selectedProvider !== "meet"}
+            onOpenChange={setIsDialogOpen}
+          >
             <DialogTrigger asChild>
-              <Button size="sm" className="bg-yellow-500 hover:bg-yellow-600 text-white">
+              <Button
+                size="sm"
+                className="bg-yellow-500 hover:bg-yellow-600 text-white"
+              >
                 <Plus className="h-4 w-4 mr-2" />
                 Novo Evento
               </Button>
@@ -364,128 +317,204 @@ function EventsManager() {
               </DialogHeader>
               <form className="space-y-4" onSubmit={handleSubmitEvent}>
                 <div className="space-y-2">
-                  <Label htmlFor="title">Título do Evento</Label>
-                  <Input 
-                    id="title" 
-                    name="title"
-                    placeholder="Ex: Encontro de Estudos"
-                    defaultValue={editingEvent?.title}
+                  <Label htmlFor="title">Título da Aula</Label>
+                  <Input
+                    id="title"
+                    value={meetConfig.title}
+                    onChange={(e) =>
+                      setMeetConfig({ ...meetConfig, title: e.target.value })
+                    }
+                    placeholder="Ex: Aula de Matemática"
                     required
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="time">Horário</Label>
-                    <Input 
-                      id="time" 
-                      name="time"
-                      type="time"
-                      defaultValue={editingEvent ? formatTimeForInput(editingEvent.time) : ''}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="maxParticipants">Participantes</Label>
-                    <Input 
-                      id="maxParticipants" 
-                      name="maxParticipants"
-                      type="number"
-                      min="1"
-                      defaultValue={editingEvent?.max_participants}
-                      required
-                    />
-                  </div>
-                </div>
+
                 <div className="space-y-2">
-                  <Label htmlFor="eventLink">Link do Evento (opcional)</Label>
-                  <Input 
-                    id="eventLink" 
-                    name="eventLink"
-                    placeholder="Ex: https://meet.google.com/seu-link"
-                    defaultValue={editingEvent?.event_link}
+                  <Label htmlFor="description">Descrição</Label>
+                  <Input
+                    id="description"
+                    value={meetConfig.description}
+                    onChange={(e) =>
+                      setMeetConfig({
+                        ...meetConfig,
+                        description: e.target.value,
+                      })
+                    }
+                    placeholder="Ex: Aula sobre equações do segundo grau"
                   />
                 </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="meet_link">Link da Aula</Label>
+                  <Input
+                    id="meet_link"
+                    value={meetConfig.meet_link}
+                    onChange={(e) =>
+                      setMeetConfig({
+                        ...meetConfig,
+                        meet_link: e.target.value,
+                      })
+                    }
+                    placeholder="Ex: https://meet.google.com/..."
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="start_time">Início</Label>
+                    <DateTimePicker
+                      value={meetConfig.start_time}
+                      onChange={(date) =>
+                        setMeetConfig({ ...meetConfig, start_time: date })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="end_time">Término</Label>
+                    <DateTimePicker
+                      value={meetConfig.end_time}
+                      onChange={(date) =>
+                        setMeetConfig({ ...meetConfig, end_time: date })
+                      }
+                    />
+                  </div>
+                </div>
+
                 <div className="flex justify-end space-x-2">
-                  <Button 
-                    type="button" 
+                  <Button
+                    type="button"
                     variant="outline"
                     onClick={() => {
-                      setEditingEvent(null);
+                      resetMeetConfig();
                       setIsDialogOpen(false);
                     }}
                   >
                     Cancelar
                   </Button>
-                  <Button type="submit" className="bg-yellow-500 hover:bg-yellow-600">
-                    {editingEvent ? "Salvar Alterações" : "Criar Evento"}
+                  <Button type="submit">
+                    {editingEvent ? "Atualizar" : "Criar"} Aula
                   </Button>
                 </div>
               </form>
             </DialogContent>
           </Dialog>
         </div>
-
-        <Dialog open={isDialogOpen && selectedProvider === 'meet'} onOpenChange={setIsDialogOpen}>
-          <DialogContent>
+        <Dialog
+          open={isDialogOpen && selectedProvider === "meet"}
+          onOpenChange={(open) => {
+            setIsDialogOpen(open);
+            if (!open) {
+              resetMeetConfig();
+            }
+          }}
+          modal={true}
+        >
+          <DialogContent
+            className="max-w-xl overflow-visible"
+            onPointerDownOutside={(e) => {
+              const target = e.target;
+              if (
+                target.closest(".rdp") ||
+                target.closest('[role="listbox"]')
+              ) {
+                e.preventDefault();
+              }
+            }}
+            onEscapeKeyDown={(e) => {
+              const activeElement = document.activeElement;
+              if (
+                activeElement?.closest(".rdp") ||
+                activeElement?.closest('[role="listbox"]')
+              ) {
+                e.preventDefault();
+              }
+            }}
+          >
             <DialogHeader>
-              <DialogTitle>Criar Nova Aula no Google Meet</DialogTitle>
+              <DialogTitle>Nova Aula</DialogTitle>
+              <DialogDescription>
+                Preencha os campos abaixo para agendar uma nova aula.
+              </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="title">Título da Aula</Label>
-                <Input
-                  id="title"
-                  value={meetConfig.title}
-                  onChange={(e) => setMeetConfig({ ...meetConfig, title: e.target.value })}
-                  placeholder="Ex: Aula de Matemática"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="description">Descrição (opcional)</Label>
-                <Input
-                  id="description"
-                  value={meetConfig.description}
-                  onChange={(e) => setMeetConfig({ ...meetConfig, description: e.target.value })}
-                  placeholder="Ex: Revisão para a prova"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="meet_link">Link do Google Meet</Label>
-                <Input
-                  id="meet_link"
-                  value={meetConfig.meet_link}
-                  onChange={(e) => setMeetConfig({ ...meetConfig, meet_link: e.target.value })}
-                  placeholder="https://meet.google.com/..."
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-6 py-4">
+              <form onSubmit={handleSubmitEvent} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="start_time">Início</Label>
+                  <Label htmlFor="title">Título da Aula *</Label>
                   <Input
-                    id="start_time"
-                    type="datetime-local"
-                    value={meetConfig.start_time}
-                    onChange={(e) => setMeetConfig({ ...meetConfig, start_time: e.target.value })}
+                    id="title"
+                    value={meetConfig.title}
+                    onChange={(e) =>
+                      setMeetConfig({ ...meetConfig, title: e.target.value })
+                    }
+                    placeholder="Ex: Aula de Matemática"
+                    required
+                    aria-required="true"
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="end_time">Término</Label>
+                  <Label htmlFor="description">Descrição</Label>
                   <Input
-                    id="end_time"
-                    type="datetime-local"
-                    value={meetConfig.end_time}
-                    onChange={(e) => setMeetConfig({ ...meetConfig, end_time: e.target.value })}
+                    id="description"
+                    value={meetConfig.description}
+                    onChange={(e) =>
+                      setMeetConfig({
+                        ...meetConfig,
+                        description: e.target.value,
+                      })
+                    }
+                    placeholder="Ex: Revisão para a prova"
+                    aria-label="Descrição da aula"
                   />
                 </div>
-              </div>
 
-              <Button onClick={createMeetClass} className="w-full">
-                Criar Aula
-              </Button>
+                <div className="space-y-2">
+                  <Label htmlFor="meet_link">Link do Google Meet *</Label>
+                  <Input
+                    id="meet_link"
+                    value={meetConfig.meet_link}
+                    onChange={(e) =>
+                      setMeetConfig({
+                        ...meetConfig,
+                        meet_link: e.target.value,
+                      })
+                    }
+                    placeholder="https://meet.google.com/..."
+                    required
+                    aria-required="true"
+                  />
+                </div>
+
+                <div className="space-y-4">
+                  <div className="relative">
+                    <DateTimePicker
+                      label="Início da Aula *"
+                      date={meetConfig.start_time}
+                      setDate={(date) =>
+                        setMeetConfig({ ...meetConfig, start_time: date })
+                      }
+                    />
+                  </div>
+
+                  <div className="relative">
+                    <DateTimePicker
+                      label="Término da Aula *"
+                      date={meetConfig.end_time}
+                      setDate={(date) =>
+                        setMeetConfig({ ...meetConfig, end_time: date })
+                      }
+                    />
+                  </div>
+                </div>
+
+                <Button
+                  type="submit"
+                  className="w-full bg-[#F3C92C] hover:bg-[#E3B91C] text-black"
+                >
+                  Criar Aula
+                </Button>
+              </form>
             </div>
           </DialogContent>
         </Dialog>
@@ -495,43 +524,55 @@ function EventsManager() {
             <TableHeader>
               <TableRow>
                 <TableHead>Título</TableHead>
-                <TableHead>Horário</TableHead>
-                <TableHead>Participantes</TableHead>
+                <TableHead>Descrição</TableHead>
+                <TableHead>Início</TableHead>
+                <TableHead>Término</TableHead>
                 <TableHead>Link</TableHead>
-                <TableHead>Ações</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {events.map((event) => (
-                <TableRow key={event.id}>
-                  <TableCell>{event.title}</TableCell>
-                  <TableCell>{formatTimeForDisplay(event.time)}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center">
-                      <Users className="h-4 w-4 mr-2" />
-                      {event.max_participants}
+              {events.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-8">
+                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                      <Calendar className="h-8 w-8" />
+                      <p>Nenhuma aula agendada</p>
+                      <p className="text-sm">
+                        Clique em "Nova Aula" para agendar uma aula
+                      </p>
                     </div>
                   </TableCell>
-                  <TableCell>
-                    {event.event_link ? (
-                      <a 
-                        href={event.event_link} 
-                        target="_blank" 
+                </TableRow>
+              ) : (
+                events.map((event) => (
+                  <TableRow key={event.id}>
+                    <TableCell>{event.title}</TableCell>
+                    <TableCell>{event.description}</TableCell>
+                    <TableCell>{formatDateTime(event.start_time)}</TableCell>
+                    <TableCell>{formatDateTime(event.end_time)}</TableCell>
+                    <TableCell>
+                      <a
+                        href={event.meet_link}
+                        target="_blank"
                         rel="noopener noreferrer"
-                        className="text-blue-500 hover:underline"
+                        className="text-blue-500 hover:text-blue-700"
                       >
-                        {event.event_link}
+                        Acessar
                       </a>
-                    ) : (
-                      <span className="text-muted-foreground text-sm">Sem link</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex space-x-2">
+                    </TableCell>
+                    <TableCell className="text-right space-x-2">
                       <Button
-                        size="sm"
                         variant="outline"
+                        size="sm"
                         onClick={() => {
+                          setMeetConfig({
+                            title: event.title,
+                            description: event.description,
+                            meet_link: event.meet_link,
+                            start_time: new Date(event.start_time),
+                            end_time: new Date(event.end_time),
+                          });
                           setEditingEvent(event);
                           setIsDialogOpen(true);
                         }}
@@ -539,16 +580,16 @@ function EventsManager() {
                         <Edit className="h-4 w-4" />
                       </Button>
                       <Button
-                        size="sm"
                         variant="destructive"
+                        size="sm"
                         onClick={() => handleDeleteEvent(event.id)}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </div>

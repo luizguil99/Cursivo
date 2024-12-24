@@ -15,10 +15,11 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
 import VimeoPlayer from "./VimeoPlayer";
 import PandaVideo from "@/components/ui/panda-video";
-import { 
-  getNotificationsFromCache, 
-  setNotificationsCache, 
-  invalidateNotificationsCache 
+import DailyEvents from "@/components/community/DailyEvents";
+import {
+  getNotificationsFromCache,
+  setNotificationsCache,
+  invalidateNotificationsCache,
 } from "@/lib/notificationsCache";
 
 function CourseContent({ lesson, onVideoEnd, updateSidebarCompletion }) {
@@ -28,7 +29,9 @@ function CourseContent({ lesson, onVideoEnd, updateSidebarCompletion }) {
   const [isLoading, setIsLoading] = useState(true);
   const [currentVideoId, setCurrentVideoId] = useState(null);
   const [isChangingLesson, setIsChangingLesson] = useState(false);
-  const [notifications, setNotifications] = useState(() => getNotificationsFromCache() || []);
+  const [notifications, setNotifications] = useState(
+    () => getNotificationsFromCache() || []
+  );
 
   // Buscar notificações do Supabase
   useEffect(() => {
@@ -566,7 +569,8 @@ function CourseContent({ lesson, onVideoEnd, updateSidebarCompletion }) {
 
             {/* Coluna de Notificações */}
             <div className="w-full lg:w-80">
-              <div className="rounded-lg p-4 sm:p-6 border bg-card text-card-foreground lg:sticky lg:top-6">
+              {/* Notificações */}
+              <div className="rounded-lg p-4 sm:p-6 border bg-card text-card-foreground lg:sticky lg:top-6 mb-4">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-base sm:text-lg font-semibold">
                     Notificações
@@ -599,22 +603,17 @@ function CourseContent({ lesson, onVideoEnd, updateSidebarCompletion }) {
                       <p className="text-xs text-muted-foreground">
                         {notification.message}
                       </p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <Clock className="h-3 w-3 text-muted-foreground" />
-                        <p className="text-xs text-muted-foreground">
-                          {formatRelativeTime(notification.created_at)}
-                        </p>
-                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {formatRelativeTime(notification.created_at)}
+                      </p>
                     </div>
                   ))}
                 </div>
+              </div>
 
-                <button
-                  type="button"
-                  className="w-full mt-4 sm:mt-6 px-4 py-2 border rounded-lg text-xs sm:text-sm hover:bg-primary/5 transition-colors"
-                >
-                  Ver todas as notificações
-                </button>
+              {/* Eventos */}
+              <div className="lg:sticky lg:top-[calc(1.5rem+var(--header-height)+16rem)]">
+                <DailyEvents />
               </div>
             </div>
           </div>

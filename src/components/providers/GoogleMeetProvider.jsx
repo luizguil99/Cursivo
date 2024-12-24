@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { MessageSquare, Video, Calendar, Users } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { LiveStatus } from "@/components/ui/live-status";
+import { cn } from "@/lib/utils";
 
 // Componente para integração com o Google Meet (visão do aluno)
 const GoogleMeetProvider = () => {
@@ -96,9 +98,12 @@ const GoogleMeetProvider = () => {
 
   if (isLoading) {
     return (
-      <Card className="p-6">
+      <Card className="p-6 border-yellow-200">
         <div className="flex items-center justify-center">
-          <span className="text-muted-foreground">Carregando aulas...</span>
+          <div className="animate-pulse flex space-x-4">
+            <div className="h-4 w-4 bg-yellow-200 rounded-full"></div>
+            <div className="h-4 w-24 bg-yellow-200 rounded"></div>
+          </div>
         </div>
       </Card>
     );
@@ -107,12 +112,18 @@ const GoogleMeetProvider = () => {
   return (
     <div className="space-y-6">
       {currentClass && (
-        <Card className="p-6 border-2 border-primary">
-          <div className="space-y-4">
+        <Card className="relative overflow-hidden border-2 border-[#F3C92C]">
+          {/* Fundo decorativo */}
+          <div className="absolute inset-0 bg-gradient-to-r from-yellow-50 to-white pointer-events-none"></div>
+          
+          <div className="relative p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Video className="w-6 h-6 text-primary" />
-                <h2 className="text-xl font-semibold">Aula em Andamento</h2>
+              <div className="flex items-center gap-4">
+                <Video className="w-6 h-6 text-[#F3C92C]" />
+                <div>
+                  <h2 className="text-xl font-semibold">Aula em Andamento</h2>
+                  <LiveStatus className="mt-1" />
+                </div>
               </div>
               <span className="text-sm text-muted-foreground">
                 Até {formatDateTime(currentClass.end_time)}
@@ -120,13 +131,13 @@ const GoogleMeetProvider = () => {
             </div>
 
             <div className="space-y-2">
-              <h3 className="font-medium">{currentClass.title}</h3>
+              <h3 className="text-lg font-medium">{currentClass.title}</h3>
               <p className="text-sm text-muted-foreground">{currentClass.description}</p>
             </div>
 
             <Button
               onClick={() => window.open(currentClass.meet_link, '_blank')}
-              className="w-full flex items-center justify-center gap-2"
+              className="w-full bg-[#F3C92C] hover:bg-[#E3B91C] text-black flex items-center justify-center gap-2"
             >
               <Video className="w-4 h-4" />
               Entrar na Aula Agora
@@ -136,16 +147,22 @@ const GoogleMeetProvider = () => {
       )}
 
       {upcomingClasses.length > 0 && (
-        <Card className="p-6">
-          <div className="space-y-4">
+        <Card className="border-yellow-200">
+          <div className="p-6 space-y-4">
             <div className="flex items-center gap-2">
-              <Calendar className="w-6 h-6 text-muted-foreground" />
+              <Calendar className="w-6 h-6 text-[#F3C92C]" />
               <h2 className="text-xl font-semibold">Próximas Aulas</h2>
             </div>
 
             <div className="space-y-4">
               {upcomingClasses.map((cls) => (
-                <div key={cls.id} className="flex items-center justify-between py-2 border-b last:border-0">
+                <div 
+                  key={cls.id} 
+                  className={cn(
+                    "flex items-center justify-between py-3 px-4 rounded-lg",
+                    "bg-gradient-to-r from-yellow-50 to-transparent"
+                  )}
+                >
                   <div>
                     <h3 className="font-medium">{cls.title}</h3>
                     <p className="text-sm text-muted-foreground">
@@ -156,6 +173,7 @@ const GoogleMeetProvider = () => {
                     variant="outline"
                     onClick={() => window.open(cls.meet_link, '_blank')}
                     disabled={new Date(cls.start_time) > new Date()}
+                    className="border-yellow-200 hover:bg-yellow-50"
                   >
                     <Video className="w-4 h-4" />
                   </Button>
@@ -167,13 +185,17 @@ const GoogleMeetProvider = () => {
       )}
 
       {!currentClass && upcomingClasses.length === 0 && (
-        <Card className="p-6">
-          <div className="flex flex-col items-center justify-center gap-2 py-8">
-            <Calendar className="w-12 h-12 text-muted-foreground" />
-            <h3 className="text-xl font-semibold">Nenhuma Aula Agendada</h3>
-            <p className="text-sm text-muted-foreground">
-              No momento não há aulas ao vivo disponíveis.
-            </p>
+        <Card className="border-yellow-200">
+          <div className="flex flex-col items-center justify-center gap-4 py-12">
+            <div className="w-16 h-16 rounded-full bg-yellow-100 flex items-center justify-center">
+              <Calendar className="w-8 h-8 text-[#F3C92C]" />
+            </div>
+            <div className="text-center">
+              <h3 className="text-xl font-semibold">Nenhuma Aula Agendada</h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                No momento não há aulas ao vivo disponíveis.
+              </p>
+            </div>
           </div>
         </Card>
       )}

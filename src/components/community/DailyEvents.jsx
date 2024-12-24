@@ -11,14 +11,19 @@ function DailyEvents() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Função para formatar a hora
-  const formatTime = (timeString) => {
-    try {
-      const [hours, minutes] = timeString.split(':');
-      return `${hours}:${minutes}`;
-    } catch (error) {
-      return timeString;
-    }
+  // Função para formatar data e hora
+  const formatDateTime = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleTimeString('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+  };
+
+  // Gerar número aleatório de participantes (entre 5 e 100)
+  const getRandomParticipants = () => {
+    return Math.floor(Math.random() * (100 - 5 + 1)) + 5;
   };
 
   // Carregar eventos e configuração ao montar o componente
@@ -60,13 +65,20 @@ function DailyEvents() {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('eventos_aovivo')
+        .from('live_classes')
         .select('*')
-        .eq('is_active', true)
-        .order('time', { ascending: true });
+        .gte('end_time', new Date().toISOString()) // Filtra apenas eventos que ainda não terminaram
+        .order('start_time', { ascending: true });
 
       if (error) throw error;
-      setEvents(data || []);
+
+      // Adiciona número aleatório de participantes para cada evento
+      const eventsWithParticipants = (data || []).map(event => ({
+        ...event,
+        participants: getRandomParticipants()
+      }));
+
+      setEvents(eventsWithParticipants);
     } catch (error) {
       console.error('Erro ao carregar eventos:', error);
       toast({
@@ -84,7 +96,7 @@ function DailyEvents() {
     try {
       // Buscar o evento atual
       const { data: event, error: fetchError } = await supabase
-        .from('eventos_aovivo')
+        .from('live_classes')
         .select('current_participants, max_participants')
         .eq('id', eventId)
         .single();
@@ -103,7 +115,7 @@ function DailyEvents() {
 
       // Incrementar o número de participantes
       const { error: updateError } = await supabase
-        .from('eventos_aovivo')
+        .from('live_classes')
         .update({ 
           current_participants: event.current_participants + 1 
         })
@@ -152,15 +164,15 @@ function DailyEvents() {
                 <p className="text-sm font-medium">{event.title}</p>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Calendar className="h-3 w-3" />
-                  {formatTime(event.time)}
+                  {formatDateTime(event.start_time)}
                   <span>•</span>
                   <Users className="h-3 w-3" />
-                  {event.max_participants}
+                  {event.participants} 
                 </div>
               </div>
-              {event.event_link && (
+              {event.meet_link && (
                 <a
-                  href={event.event_link}
+                  href={event.meet_link}
                   target="_blank"
                   rel="noopener noreferrer"
                 >
