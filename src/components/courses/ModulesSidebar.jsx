@@ -19,7 +19,13 @@ const ModuleTitleSkeleton = () => (
   <span className="animate-pulse bg-gray-300 rounded h-4 w-24 inline-block"></span>
 );
 
-function ModulesSidebar({ course, onTopicSelect, collapsed, setCollapsed, onUpdateCompletion }) {
+function ModulesSidebar({
+  course,
+  onTopicSelect,
+  collapsed,
+  setCollapsed,
+  onUpdateCompletion,
+}) {
   const isMobile = window.innerWidth < 768;
   const [modules, setModules] = useState([]);
   const [videos, setVideos] = useState([]);
@@ -168,9 +174,9 @@ function ModulesSidebar({ course, onTopicSelect, collapsed, setCollapsed, onUpda
   // Função para atualizar o estado de conclusão de uma aula localmente
   const updateLessonCompletionStatus = (lessonId, isCompleted) => {
     if (isCompleted) {
-      setCompletedLessons(prev => [...prev, lessonId]);
+      setCompletedLessons((prev) => [...prev, lessonId]);
     } else {
-      setCompletedLessons(prev => prev.filter(id => id !== lessonId));
+      setCompletedLessons((prev) => prev.filter((id) => id !== lessonId));
     }
   };
 

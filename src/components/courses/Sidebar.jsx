@@ -141,7 +141,7 @@ function Sidebar({ onCourseSelect, onScheduleClick, onModuleSidebarToggle }) {
         collapsed ? "md:w-16" : "md:w-60"
       )}
     >
-      <div className="flex items-center justify-between p-2 h-10 sm:h-12 md:h-14 border-b">
+      <div className="flex items-center justify-between p-3 h-12 md:h-14 border-b">
         {!collapsed && (
           <h2 className="hidden md:block text-sm sm:text-base md:text-lg font-semibold truncate pl-2">
             Menu
@@ -151,7 +151,7 @@ function Sidebar({ onCourseSelect, onScheduleClick, onModuleSidebarToggle }) {
           variant="ghost"
           size="icon"
           className={cn(
-            "h-6 w-6 shrink-0",
+            "h-7 w-7 shrink-0",
             "hidden md:flex",
             collapsed ? "mx-auto" : "ml-auto"
           )}
@@ -170,19 +170,17 @@ function Sidebar({ onCourseSelect, onScheduleClick, onModuleSidebarToggle }) {
       <div
         className={cn(
           "flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-[#F3C92C] scrollbar-track-transparent hover:scrollbar-thumb-[#B4902A]",
-          collapsed ? "space-y-1.5 p-1.5" : "space-y-1 p-2"
+          collapsed ? "space-y-1 p-1.5" : "space-y-0.5 p-2"
         )}
       >
-        <div className={cn("space-y-1", collapsed && "space-y-1.5")}>
+        <div className={cn("space-y-0.5", collapsed && "space-y-1")}>
           {mainButtons.map((button, index) => (
             <Button
               key={index}
               variant="ghost"
               className={cn(
-                "w-full flex items-center h-auto",
-                collapsed
-                  ? "px-1.5 py-1.5"
-                  : "gap-1.5 py-1.5 px-2",
+                "w-full flex items-center h-10",
+                collapsed ? "px-1.5 py-1" : "gap-2 py-1 px-3",
                 "justify-center md:justify-start",
                 collapsed && "md:justify-center"
               )}
@@ -194,8 +192,8 @@ function Sidebar({ onCourseSelect, onScheduleClick, onModuleSidebarToggle }) {
                 className: cn(
                   "shrink-0",
                   collapsed
-                    ? "h-4 w-4"
-                    : "h-3 w-3 sm:h-3.5 sm:w-3.5 md:h-4 md:w-4"
+                    ? "h-5 w-5"
+                    : "h-4 w-4 sm:h-4.5 sm:w-4.5 md:h-5 md:w-5"
                 ),
               })}
               {!collapsed && (
@@ -205,10 +203,10 @@ function Sidebar({ onCourseSelect, onScheduleClick, onModuleSidebarToggle }) {
                     "hidden md:flex" // Oculta em mobile, mostra em desktop
                   )}
                 >
-                  <span className="text-[10px] sm:text-xs md:text-sm font-medium truncate">
+                  <span className="text-sm font-medium truncate">
                     {button.label}
                   </span>
-                  {button.extra && <div className="ml-2">{button.extra}</div>}
+                  {button.extra && <div className="ml-1.5">{button.extra}</div>}
                 </div>
               )}
             </Button>
@@ -222,22 +220,18 @@ function Sidebar({ onCourseSelect, onScheduleClick, onModuleSidebarToggle }) {
             showCourses && !collapsed ? "opacity-100 h-auto" : "opacity-0 h-0"
           )}
         >
-          <Separator className="my-1.5 sm:my-2" />
+          <Separator className="my-2" />
           <CourseList onCourseSelect={handleCourseSelect} />
         </div>
       </div>
 
       {/* Logout Button */}
-      <div
-        className={cn("border-t", collapsed ? "p-1.5" : "p-1.5 sm:p-2 md:p-4")}
-      >
+      <div className={cn("border-t", collapsed ? "p-1.5" : "p-2")}>
         <Button
           variant="ghost"
           className={cn(
-            "w-full flex items-center h-auto",
-            collapsed
-              ? "px-1 py-2"
-              : "gap-1 sm:gap-1.5 md:gap-2 py-1 sm:py-1.5 md:py-2 px-2",
+            "w-full flex items-center h-10",
+            collapsed ? "px-1.5 py-1" : "gap-2 py-1 px-3",
             "justify-center md:justify-start",
             collapsed && "md:justify-center"
           )}
@@ -246,11 +240,11 @@ function Sidebar({ onCourseSelect, onScheduleClick, onModuleSidebarToggle }) {
           <LogOut
             className={cn(
               "shrink-0",
-              collapsed ? "h-4 w-4" : "h-3 w-3 sm:h-3.5 sm:w-3.5 md:h-4 md:w-4"
+              collapsed ? "h-5 w-5" : "h-4 w-4 sm:h-4.5 sm:w-4.5 md:h-5 md:w-5"
             )}
           />
           {!collapsed && (
-            <span className="text-[10px] sm:text-xs md:text-sm font-medium truncate">
+            <span className="text-sm font-medium truncate">
               Sair
             </span>
           )}

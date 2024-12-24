@@ -14,10 +14,10 @@ function DailyEvents() {
   // Função para formatar data e hora
   const formatDateTime = (dateString) => {
     const date = new Date(dateString);
-    return date.toLocaleTimeString('pt-BR', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
+    return date.toLocaleTimeString("pt-BR", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
     });
   };
 
@@ -36,13 +36,13 @@ function DailyEvents() {
     try {
       // Buscar configuração de visibilidade
       const { data: configData, error: configError } = await supabase
-        .from('configuracoes_globais')
-        .select('valor')
-        .eq('chave', 'mostrar_eventos')
+        .from("configuracoes_globais")
+        .select("valor")
+        .eq("chave", "mostrar_eventos")
         .single();
 
       if (configError) throw configError;
-      
+
       const shouldShow = configData?.valor ?? true;
       setShowEvents(shouldShow);
 
@@ -51,7 +51,7 @@ function DailyEvents() {
         await fetchEvents();
       }
     } catch (error) {
-      console.error('Erro ao carregar configuração:', error);
+      console.error("Erro ao carregar configuração:", error);
       toast({
         title: "Erro ao carregar configuração",
         description: "Não foi possível verificar a visibilidade dos eventos.",
@@ -65,22 +65,22 @@ function DailyEvents() {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('live_classes')
-        .select('*')
-        .gte('end_time', new Date().toISOString()) // Filtra apenas eventos que ainda não terminaram
-        .order('start_time', { ascending: true });
+        .from("live_classes")
+        .select("*")
+        .gte("end_time", new Date().toISOString()) // Filtra apenas eventos que ainda não terminaram
+        .order("start_time", { ascending: true });
 
       if (error) throw error;
 
       // Adiciona número aleatório de participantes para cada evento
-      const eventsWithParticipants = (data || []).map(event => ({
+      const eventsWithParticipants = (data || []).map((event) => ({
         ...event,
-        participants: getRandomParticipants()
+        participants: getRandomParticipants(),
       }));
 
       setEvents(eventsWithParticipants);
     } catch (error) {
-      console.error('Erro ao carregar eventos:', error);
+      console.error("Erro ao carregar eventos:", error);
       toast({
         title: "Erro ao carregar eventos",
         description: "Não foi possível carregar a lista de eventos.",
@@ -96,9 +96,9 @@ function DailyEvents() {
     try {
       // Buscar o evento atual
       const { data: event, error: fetchError } = await supabase
-        .from('live_classes')
-        .select('current_participants, max_participants')
-        .eq('id', eventId)
+        .from("live_classes")
+        .select("current_participants, max_participants")
+        .eq("id", eventId)
         .single();
 
       if (fetchError) throw fetchError;
@@ -107,7 +107,8 @@ function DailyEvents() {
       if (event.current_participants >= event.max_participants) {
         toast({
           title: "Evento lotado",
-          description: "Desculpe, o evento já atingiu o número máximo de participantes.",
+          description:
+            "Desculpe, o evento já atingiu o número máximo de participantes.",
           variant: "destructive",
         });
         return;
@@ -115,11 +116,11 @@ function DailyEvents() {
 
       // Incrementar o número de participantes
       const { error: updateError } = await supabase
-        .from('live_classes')
-        .update({ 
-          current_participants: event.current_participants + 1 
+        .from("live_classes")
+        .update({
+          current_participants: event.current_participants + 1,
         })
-        .eq('id', eventId);
+        .eq("id", eventId);
 
       if (updateError) throw updateError;
 
@@ -131,7 +132,7 @@ function DailyEvents() {
         description: "Você foi adicionado ao evento.",
       });
     } catch (error) {
-      console.error('Erro ao participar do evento:', error);
+      console.error("Erro ao participar do evento:", error);
       toast({
         title: "Erro ao participar",
         description: "Não foi possível participar do evento.",
@@ -154,9 +155,13 @@ function DailyEvents() {
       </div>
       <div className="p-3 space-y-3">
         {loading ? (
-          <p className="text-sm text-muted-foreground text-center">Carregando eventos...</p>
+          <p className="text-sm text-muted-foreground text-center">
+            Carregando eventos...
+          </p>
         ) : events.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center">Nenhum evento disponível hoje</p>
+          <p className="text-sm text-muted-foreground text-center">
+            Nenhum evento disponível hoje
+          </p>
         ) : (
           events.map((event) => (
             <div key={event.id} className="flex items-center justify-between">
@@ -167,7 +172,7 @@ function DailyEvents() {
                   {formatDateTime(event.start_time)}
                   <span>•</span>
                   <Users className="h-3 w-3" />
-                  {event.participants} 
+                  {event.participants}
                 </div>
               </div>
               {event.meet_link && (
