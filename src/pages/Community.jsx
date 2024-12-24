@@ -14,6 +14,7 @@ import {
   supabase,
   toggleDiscussionLike,
   addComment,
+  deleteDiscussion,
 } from "@/lib/supabase";
 import { toast } from "@/components/ui/use-toast";
 import { ThumbsUp, MessageCircle, Share2 } from "lucide-react";
@@ -29,6 +30,7 @@ import {
 } from "@/components/ui/dialog";
 import { uploadImage } from "@/lib/s3";
 import { getAvatarUrl, getInitials, getDisplayName } from "@/utils/avatar";
+import DiscussionCard from "@/components/community/DiscussionCard";
 
 const AVATAR_STYLES = [
   {
@@ -87,7 +89,7 @@ export default function Community() {
   const [activeDiscussion, setActiveDiscussion] = useState(null);
   const [isCommenting, setIsCommenting] = useState(false);
   const [isLiking, setIsLiking] = useState(false);
-  const [currentPage, setCurrentPage] = useState(0);
+  const [visiblePosts, setVisiblePosts] = useState(5);
   const [selectedStyle, setSelectedStyle] = useState(
     currentUser?.user_metadata?.avatar_style || AVATAR_STYLES[0].value
   );
@@ -95,64 +97,40 @@ export default function Community() {
     currentUser?.user_metadata?.avatar_seed || null
   );
   const [isUploading, setIsUploading] = useState(false);
+  const [userName, setUserName] = useState("Usuário");
+
+  useEffect(() => {
+    const fetchUserName = async () => {
+      if (currentUser) {
+        const { data: perfil, error } = await supabase
+          .from("perfis")
+          .select("nome")
+          .eq("id", currentUser.id)
+          .single();
+
+        if (!error && perfil) {
+          setUserName(perfil.nome);
+        }
+      }
+    };
+
+    fetchUserName();
+  }, [currentUser]);
 
   const handleAvatarChange = async (style, seed) => {
     try {
       setSelectedStyle(style);
       setSelectedSeed(seed);
 
-      const avatarUrl = getAvatarUrl(currentUser, style, seed);
-
-      // Atualiza o usuário no Auth
-      const { data, error: userError } = await supabase.auth.updateUser({
-        data: {
-          avatar_style: style,
-          avatar_seed: seed,
-          avatar_url: avatarUrl,
-        },
-      });
-
-      if (userError) throw userError;
-
-      // Atualiza o avatar em todas as discussões do usuário
-      const { error: discussionsError } = await supabase
-        .from("discussions")
-        .update({
-          user_metadata: {
-            ...currentUser.user_metadata,
-            avatar_style: style,
-            avatar_seed: seed,
-            avatar_url: avatarUrl,
-          },
-        })
-        .eq("user_id", currentUser.id);
-
-      if (discussionsError) throw discussionsError;
-
-      // Atualiza o avatar em todos os comentários do usuário
-      const { error: commentsError } = await supabase
-        .from("comments")
-        .update({
-          user_metadata: {
-            ...currentUser.user_metadata,
-            avatar_style: style,
-            avatar_seed: seed,
-            avatar_url: avatarUrl,
-          },
-        })
-        .eq("user_id", currentUser.id);
-
-      if (commentsError) throw commentsError;
+      const { avatarUrl } = await updateUserAvatar(currentUser.id, style, seed);
 
       // Atualiza o currentUser localmente
-      if (data.user) {
-        currentUser.user_metadata = {
-          ...currentUser.user_metadata,
-          avatar_style: style,
-          avatar_seed: seed,
-          avatar_url: avatarUrl,
-        };
-      }
+      currentUser.user_metadata = {
+        ...currentUser.user_metadata,
+        avatar_style: style,
+        avatar_seed: seed,
+        avatar_url: avatarUrl,
+      };
 
       // Atualiza as discussões na interface
       setDiscussions(
@@ -195,7 +173,7 @@ export default function Community() {
       });
 
       // Atualiza a lista de discussões
-      refreshDiscussions();
+      refreshDiscussions(currentUser.id);
     } catch (error) {
       console.error("Erro ao atualizar avatar:", error);
       toast({
@@ -321,7 +299,7 @@ export default function Community() {
         description: "Avatar atualizado com sucesso!",
       });
 
-      refreshDiscussions();
+      refreshDiscussions(currentUser.id);
     } catch (error) {
       console.error("Erro ao fazer upload do avatar:", error);
       toast({
@@ -444,6 +422,7 @@ export default function Community() {
 
     setPosting(true);
     try {
+      // Cria a discussão
       await createDiscussion(
         "Nova publicação", // title
         quickPost, // content
@@ -456,7 +435,7 @@ export default function Community() {
       if (editor) {
         editor.innerHTML = "";
       }
-      refreshDiscussions();
+      refreshDiscussions(currentUser.id);
 
       toast({
         description: "Publicação criada com sucesso!",
@@ -472,6 +451,24 @@ export default function Community() {
     }
   };
 
+  const handleDelete = async (discussionId) => {
+    try {
+      await deleteDiscussion(discussionId, currentUser.id);
+      toast({
+        title: "Publicação excluída",
+        description: "Sua publicação foi excluída com sucesso.",
+      });
+      refreshDiscussions(currentUser.id);
+    } catch (error) {
+      console.error("Erro ao excluir publicação:", error);
+      toast({
+        title: "Erro ao excluir",
+        description: error.message || "Não foi possível excluir a publicação.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const formatDate = (date) => {
     return formatDistanceToNow(new Date(date), {
       addSuffix: true,
@@ -484,6 +481,14 @@ export default function Community() {
       AVATAR_STYLES[Math.floor(Math.random() * AVATAR_STYLES.length)];
     const seed = style.seeds[Math.floor(Math.random() * style.seeds.length)];
     return { style: style.value, seed };
+  };
+
+  const handleScroll = (e) => {
+    const bottom =
+      e.target.scrollHeight - e.target.scrollTop === e.target.clientHeight;
+    if (bottom && !discussionsLoading && visiblePosts < discussions.length) {
+      setVisiblePosts((prev) => prev + 5);
+    }
   };
 
   useEffect(() => {
@@ -506,353 +511,114 @@ export default function Community() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <TopNav />
-      <div className="flex">
-        <CommunitySidebar />
-        <main className="flex-1 p-6">
-          <ScrollArea className="h-full">
-            <div className="container mx-auto py-6 px-4 max-w-4xl">
-              <div className="space-y-6">
-                <div className="bg-card rounded-xl shadow-sm p-6 mb-8 border border-border">
-                  <div className="flex space-x-4">
-                    <div className="relative">
-                      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                        <DialogTrigger asChild>
-                          <div className="relative flex shrink-0 overflow-hidden rounded-full h-10 w-10 ring-2 ring-white hover:ring-blue-400 transition-all cursor-pointer">
-                            <img
-                              src={
-                                currentUser?.user_metadata?.avatar_url ||
-                                getAvatarUrl(
-                                  currentUser,
-                                  currentUser?.user_metadata?.avatar_style,
-                                  currentUser?.user_metadata?.avatar_seed
-                                )
-                              }
-                              alt="Avatar"
-                              className="aspect-square h-full w-full"
-                            />
-                          </div>
-                        </DialogTrigger>
-                        <DialogContent className="max-w-md">
-                          <DialogHeader>
-                            <DialogTitle>Escolha seu avatar</DialogTitle>
-                          </DialogHeader>
-                          <div className="space-y-6">
-                            {/* Upload de Foto */}
-                            <div className="space-y-2">
-                              <h3 className="text-sm font-medium">
-                                Foto Personalizada
-                              </h3>
-                              <div className="flex items-center gap-4">
-                                {currentUser?.user_metadata?.avatar_style ===
-                                  "custom" && (
-                                  <div className="relative flex shrink-0 overflow-hidden rounded-full h-20 w-20 ring-2 ring-white">
-                                    <img
-                                      src={currentUser.user_metadata.avatar_url}
-                                      alt="Avatar personalizado"
-                                      className="w-full h-full object-cover"
-                                    />
-                                  </div>
-                                )}
-                                <div className="flex-1">
-                                  <label
-                                    htmlFor="avatar-upload"
-                                    className={`inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 w-full cursor-pointer ${
-                                      isUploading
-                                        ? "opacity-50 cursor-not-allowed"
-                                        : ""
-                                    }`}
-                                  >
-                                    {isUploading ? (
-                                      <div className="flex items-center gap-2">
-                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                        <span>Carregando...</span>
-                                      </div>
-                                    ) : (
-                                      "Fazer Upload"
-                                    )}
-                                    <input
-                                      id="avatar-upload"
-                                      type="file"
-                                      accept="image/*"
-                                      onChange={handleAvatarUpload}
-                                      disabled={isUploading}
-                                      className="hidden"
-                                    />
-                                  </label>
-                                  <p className="text-xs text-muted-foreground mt-1">
-                                    JPG, PNG ou GIF. Máximo 5MB.
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-
-                            <Separator />
-
-                            {/* Seletor de Estilo */}
-                            <div className="space-y-2">
-                              <h3 className="text-sm font-medium">
-                                Avatares Pré-definidos
-                              </h3>
-                              <div className="flex gap-2 overflow-x-auto pb-2">
-                                {AVATAR_STYLES.map((style) => (
-                                  <button
-                                    key={style.value}
-                                    onClick={() =>
-                                      setSelectedStyle(style.value)
-                                    }
-                                    className={`px-3 py-1.5 rounded-full text-sm whitespace-nowrap transition-all ${
-                                      selectedStyle === style.value
-                                        ? "bg-primary text-primary-foreground"
-                                        : "bg-muted hover:bg-muted/80"
-                                    }`}
-                                  >
-                                    {style.label}
-                                  </button>
-                                ))}
-                              </div>
-
-                              {/* Grid de Avatares */}
-                              <div className="space-y-2">
-                                <h3 className="text-sm font-medium">
-                                  {
-                                    AVATAR_STYLES.find(
-                                      (s) => s.value === selectedStyle
-                                    )?.label
-                                  }
-                                </h3>
-                                <div className="grid grid-cols-3 gap-3">
-                                  {AVATAR_STYLES.find(
-                                    (s) => s.value === selectedStyle
-                                  )
-                                    ?.seeds.slice(
-                                      currentPage * 6,
-                                      currentPage * 6 + 6
-                                    )
-                                    .map((seed) => (
-                                      <button
-                                        key={seed}
-                                        onClick={() =>
-                                          handleAvatarChange(
-                                            selectedStyle,
-                                            seed
-                                          )
-                                        }
-                                        className={`relative flex shrink-0 overflow-hidden rounded-full h-20 w-20 transition-all mx-auto group
-                                          ${
-                                            selectedSeed === seed
-                                              ? "ring-4 ring-primary"
-                                              : "ring-2 ring-white hover:ring-blue-400"
-                                          }`}
-                                      >
-                                        <img
-                                          src={getAvatarUrl(
-                                            currentUser,
-                                            selectedStyle,
-                                            seed
-                                          )}
-                                          alt={`Avatar ${selectedStyle} ${seed}`}
-                                          className="w-full h-full object-cover transition-transform group-hover:scale-110"
-                                        />
-                                      </button>
-                                    ))}
-                                </div>
-
-                                {/* Paginação Simplificada */}
-                                {AVATAR_STYLES.find(
-                                  (s) => s.value === selectedStyle
-                                )?.seeds.length > 6 && (
-                                  <div className="flex justify-center gap-1 mt-4">
-                                    {Array.from({
-                                      length: Math.ceil(
-                                        AVATAR_STYLES.find(
-                                          (s) => s.value === selectedStyle
-                                        )?.seeds.length / 6
-                                      ),
-                                    }).map((_, index) => (
-                                      <button
-                                        key={index}
-                                        onClick={() => setCurrentPage(index)}
-                                        className={`w-2 h-2 rounded-full transition-all ${
-                                          currentPage === index
-                                            ? "bg-primary w-4"
-                                            : "bg-muted hover:bg-muted/80"
-                                        }`}
-                                        aria-label={`Página ${index + 1}`}
-                                      />
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </DialogContent>
-                      </Dialog>
-                    </div>
-                    <div className="flex-1">
-                      <form onSubmit={handleQuickPost}>
-                        <RichTextEditor
-                          value={quickPost}
-                          onChange={(value) => setQuickPost(value)}
-                          placeholder="O que você está pensando?"
-                        />
-                        <div className="mt-4 flex justify-end">
-                          <Button
-                            type="submit"
-                            disabled={posting || !quickPost.trim()}
-                            className="bg-blue-600 hover:bg-blue-700 text-white"
-                          >
-                            {posting ? "Publicando..." : "Publicar"}
-                          </Button>
-                        </div>
-                      </form>
-                    </div>
-                  </div>
-                </div>
-
-                {discussions.map((discussion) => (
-                  <div
-                    key={discussion.id}
-                    className="bg-card rounded-xl shadow-sm hover:shadow-md transition-all duration-200 border border-border"
-                  >
-                    <div className="p-6">
-                      <div className="flex items-start space-x-4">
-                        <Avatar className="h-10 w-10 ring-2 ring-white">
-                          <AvatarImage
-                            src={
-                              discussion?.user_metadata?.avatar_url ||
-                              getAvatarUrl(discussion)
-                            }
-                            alt={getDisplayName(discussion)}
-                          />
-                          <AvatarFallback>
-                            {getInitials(getDisplayName(discussion))}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center space-x-2">
-                            <p className="text-sm font-medium text-foreground">
-                              {getDisplayName(discussion)}
-                            </p>
-                            <span className="text-sm text-muted-foreground">
-                              {formatDate(discussion.created_at)}
-                            </span>
-                          </div>
-                          <div
-                            className="mt-1 text-sm text-foreground break-words"
-                            dangerouslySetInnerHTML={{
-                              __html: discussion.content,
-                            }}
-                          />
-                          <div className="mt-4 flex items-center space-x-4">
-                            <button
-                              onClick={() => handleLike(discussion.id)}
-                              disabled={isLiking}
-                              className={`flex items-center space-x-1 ${
-                                discussion.user_has_liked
-                                  ? "text-blue-600"
-                                  : "text-gray-500 hover:text-blue-600"
-                              }`}
-                            >
-                              <ThumbsUp className="h-4 w-4" />
-                              <span className="text-xs">
-                                {discussion.likes_count || 0} Curtir
-                              </span>
-                            </button>
-                            <button
-                              onClick={() => handleComment(discussion.id)}
-                              className="flex items-center space-x-1 text-gray-500 hover:text-blue-600"
-                            >
-                              <MessageCircle className="h-4 w-4" />
-                              <span className="text-xs">
-                                {discussion.comments_count || 0} Comentar
-                              </span>
-                            </button>
-                            <button className="flex items-center space-x-1 text-gray-500 hover:text-blue-600">
-                              <Share2 className="h-4 w-4" />
-                              <span className="text-xs">Compartilhar</span>
-                            </button>
-                          </div>
-
-                          {activeDiscussion === discussion.id &&
-                            isCommenting && (
-                              <div className="mt-4">
-                                <RichTextEditor
-                                  value={commentText}
-                                  onChange={(value) => setCommentText(value)}
-                                  placeholder="Escreva seu comentário..."
-                                />
-                                <div className="mt-2 flex justify-end space-x-2">
-                                  <Button
-                                    variant="outline"
-                                    onClick={() => {
-                                      setActiveDiscussion(null);
-                                      setIsCommenting(false);
-                                      setCommentText("");
-                                    }}
-                                  >
-                                    Cancelar
-                                  </Button>
-                                  <Button
-                                    onClick={() => submitComment(discussion.id)}
-                                    disabled={!commentText.trim()}
-                                  >
-                                    Comentar
-                                  </Button>
-                                </div>
-                              </div>
-                            )}
-
-                          {discussion.comments?.length > 0 && (
-                            <div className="mt-4 space-y-4">
-                              <Separator />
-                              {discussion.comments.map((comment) => (
-                                <div
-                                  key={comment.id}
-                                  className="flex space-x-3"
-                                >
-                                  <Avatar className="h-8 w-8">
-                                    <AvatarImage
-                                      src={
-                                        comment?.user_metadata?.avatar_url ||
-                                        getAvatarUrl(comment)
-                                      }
-                                      alt={getDisplayName(comment)}
-                                    />
-                                    <AvatarFallback>
-                                      {getInitials(getDisplayName(comment))}
-                                    </AvatarFallback>
-                                  </Avatar>
-                                  <div className="flex-1">
-                                    <div className="flex items-center space-x-2">
-                                      <p className="text-sm font-medium">
-                                        {getDisplayName(comment)}
-                                      </p>
-                                      <span className="text-xs text-gray-500">
-                                        {formatDate(comment.created_at)}
-                                      </span>
-                                    </div>
-                                    <div
-                                      className="text-sm text-gray-700"
-                                      dangerouslySetInnerHTML={{
-                                        __html: comment.content,
-                                      }}
-                                    />
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+    <div className="flex min-h-screen bg-background">
+      <CommunitySidebar />
+      <div className="flex-1">
+        <TopNav />
+        <div className="max-w-4xl mx-auto px-4 py-8">
+          {/* Quick Post Form */}
+          <div className="bg-card rounded-xl shadow-sm border border-yellow-500 p-6 mb-8">
+            <div className="flex items-center space-x-4 mb-4">
+              <Avatar>
+                <AvatarImage
+                  src={
+                    currentUser?.user_metadata?.avatar_url ||
+                    getAvatarUrl(
+                      currentUser,
+                      currentUser?.user_metadata?.avatar_style,
+                      currentUser?.user_metadata?.avatar_seed
+                    )
+                  }
+                  alt="Avatar"
+                />
+                <AvatarFallback>
+                  {getInitials(getDisplayName(currentUser))}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1">
+                <h3 className="font-medium text-foreground">
+                  {userName}
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Compartilhe seus pensamentos com a comunidade
+                </p>
               </div>
             </div>
+            <RichTextEditor
+              content={quickPost}
+              onChange={setQuickPost}
+              placeholder="O que você está pensando?"
+              className="min-h-[120px]"
+            />
+            <div className="mt-4 flex justify-end">
+              <Button
+                onClick={handleQuickPost}
+                disabled={posting || !quickPost.trim()}
+                className="bg-yellow-500 text-white px-6"
+              >
+                {posting ? (
+                  <div className="flex items-center space-x-2">
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Publicando...</span>
+                  </div>
+                ) : (
+                  "Publicar"
+                )}
+              </Button>
+            </div>
+          </div>
+
+          {/* Discussions List */}
+          <ScrollArea
+            className="h-[calc(100vh-16rem)]"
+            onScrollCapture={handleScroll}
+          >
+            <div className="space-y-6 pr-4">
+              {discussions.slice(0, visiblePosts).map((discussion) => (
+                <div
+                  key={discussion.id}
+                  className="bg-card rounded-xl shadow-sm border border-yellow-500"
+                >
+                  <DiscussionCard
+                    discussion={discussion}
+                    currentUser={currentUser}
+                    onLike={handleLike}
+                    onComment={handleComment}
+                    onDelete={handleDelete}
+                    isLiking={isLiking}
+                    isCommenting={isCommenting}
+                    activeDiscussion={activeDiscussion}
+                    commentText={commentText}
+                    setCommentText={setCommentText}
+                    onCancelComment={() => {
+                      setActiveDiscussion(null);
+                      setIsCommenting(false);
+                      setCommentText("");
+                    }}
+                    onSubmitComment={submitComment}
+                  />
+                </div>
+              ))}
+
+              {/* Loading States */}
+              {visiblePosts < discussions.length && (
+                <div className="py-8 text-center">
+                  <div className="inline-flex items-center space-x-2 text-muted-foreground">
+                    <div className="w-5 h-5 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin" />
+                    <span>Carregando mais publicações...</span>
+                  </div>
+                </div>
+              )}
+              {visiblePosts >= discussions.length && discussions.length > 0 && (
+                <div className="py-8 text-center">
+                  <div className="inline-flex items-center justify-center px-4 py-2 rounded-full bg-yellow-500/10 text-yellow-600 dark:text-yellow-400">
+                    <span>Não há mais publicações para carregar</span>
+                  </div>
+                </div>
+              )}
+            </div>
           </ScrollArea>
-        </main>
+        </div>
       </div>
     </div>
   );

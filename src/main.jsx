@@ -17,6 +17,7 @@ import AdminStudents from "./pages/admin/Students";
 import AdminQuestions from "./pages/admin/Questions";
 import AdminNotifications from "./pages/admin/Notifications";
 import ManageCourses from "./pages/admin/ManageCourses";
+import AdminEvents from "./pages/admin/events";
 import { AccessProvider } from "./contexts/AccessContext";
 import AccessDenied from "./pages/AccessDenied";
 import ResetPassword from "./pages/ResetPassword";
@@ -181,6 +182,14 @@ createRoot(document.getElementById("root")).render(
                         <AdminNotifications />
                       </AdminRoute>
                     </PrivateRoute>
+                  }
+                />
+                <Route
+                  path="/admin/events"
+                  element={
+                    <AdminRoute>
+                      <AdminEvents />
+                    </AdminRoute>
                   }
                 />
               </Routes>

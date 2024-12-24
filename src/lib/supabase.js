@@ -163,43 +163,61 @@ export const getUserProgress = async (userId) => {
 // Funções da Comunidade
 
 // Buscar todas as discussões
-export const getDiscussions = async () => {
+export const getDiscussions = async (userId) => {
   try {
-    // Primeiro busca o usuário atual
-    const {
-      data: { user: currentUser },
-    } = await supabase.auth.getUser();
-
     // Buscar discussões com comentários e likes
-    const { data, error } = await supabase
+    const { data: discussions, error } = await supabase
       .from("discussions")
       .select(
         `
         *,
-        comments:discussion_comments(
-          *
-        ),
-        likes:discussion_likes(
-          *
-        )
+        comments:discussion_comments(*),
+        discussion_likes(*)
       `
       )
       .order("created_at", { ascending: false });
 
     if (error) throw error;
 
-    // Processa os dados para o formato esperado
-    const processedData = data.map((discussion) => ({
+    // Buscar perfis de todos os usuários envolvidos
+    const userIds = [
+      ...new Set([
+        ...discussions.map((d) => d.user_id),
+        ...discussions.flatMap((d) => d.comments.map((c) => c.user_id)),
+      ]),
+    ];
+
+    const { data: perfis } = await supabase
+      .from("perfis")
+      .select("*")
+      .in("id", userIds);
+
+    const perfilPorId = Object.fromEntries(
+      perfis.map((perfil) => [perfil.id, perfil])
+    );
+
+    // Processar os dados para incluir informações adicionais
+    const processedDiscussions = discussions.map((discussion) => ({
       ...discussion,
-      comments: discussion.comments || [],
-      comments_count: discussion.comments?.length || 0,
-      likes_count: discussion.likes?.length || 0,
-      user_has_liked:
-        discussion.likes?.some((like) => like.user_id === currentUser?.id) ||
-        false,
+      user_metadata: {
+        ...discussion.user_metadata, // Mantém os dados do avatar
+        nome: perfilPorId[discussion.user_id]?.nome || "Usuário", // Adiciona o nome do perfil
+      },
+      comments: discussion.comments.map((comment) => ({
+        ...comment,
+        user_metadata: {
+          ...comment.user_metadata, // Mantém os dados do avatar
+          nome: perfilPorId[comment.user_id]?.nome || "Usuário", // Adiciona o nome do perfil
+        },
+      })),
+      user_has_liked: discussion.discussion_likes.some(
+        (like) => like.user_id === userId
+      ),
+      likes_count: discussion.discussion_likes.length,
+      comments_count: discussion.comments.length,
     }));
 
-    return processedData;
+    return processedDiscussions;
   } catch (error) {
     console.error("Erro ao buscar discussões:", error);
     return [];
@@ -246,8 +264,20 @@ export const getDiscussion = async (id) => {
 export const createDiscussion = async (title, content, userId) => {
   try {
     // Primeiro busca os dados do usuário
-    const { data: userData, error: userError } = await supabase.auth.getUser();
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
     if (userError) throw userError;
+
+    // Busca o perfil do usuário
+    const { data: perfil, error: perfilError } = await supabase
+      .from("perfis")
+      .select("nome")
+      .eq("id", userId)
+      .single();
+
+    if (perfilError) throw perfilError;
 
     const { data, error } = await supabase
       .from("discussions")
@@ -256,7 +286,13 @@ export const createDiscussion = async (title, content, userId) => {
           title,
           content,
           user_id: userId,
-          user_metadata: userData.user.user_metadata,
+          user_metadata: {
+            ...user.user_metadata,
+            avatar_style: user.user_metadata.avatar_style,
+            avatar_seed: user.user_metadata.avatar_seed,
+            avatar_url: user.user_metadata.avatar_url,
+            nome: perfil.nome,
+          },
         },
       ])
       .select()
@@ -274,8 +310,20 @@ export const createDiscussion = async (title, content, userId) => {
 export const addComment = async (discussionId, content, userId) => {
   try {
     // Primeiro busca os dados do usuário
-    const { data: userData, error: userError } = await supabase.auth.getUser();
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
     if (userError) throw userError;
+
+    // Busca o perfil do usuário
+    const { data: perfil, error: perfilError } = await supabase
+      .from("perfis")
+      .select("nome")
+      .eq("id", userId)
+      .single();
+
+    if (perfilError) throw perfilError;
 
     // Insere o comentário
     const { data, error } = await supabase
@@ -285,7 +333,13 @@ export const addComment = async (discussionId, content, userId) => {
           discussion_id: discussionId,
           content,
           user_id: userId,
-          user_metadata: userData.user.user_metadata,
+          user_metadata: {
+            ...user.user_metadata,
+            avatar_style: user.user_metadata.avatar_style,
+            avatar_seed: user.user_metadata.avatar_seed,
+            avatar_url: user.user_metadata.avatar_url,
+            nome: perfil.nome,
+          },
         },
       ])
       .select("*, discussion:discussion_id(*)")
@@ -305,9 +359,9 @@ export const addComment = async (discussionId, content, userId) => {
 
     return {
       ...data,
-      user: {
-        id: userId,
-        user_metadata: userData.user.user_metadata,
+      user_metadata: {
+        ...user.user_metadata,
+        nome: perfil.nome,
       },
     };
   } catch (error) {
@@ -331,23 +385,53 @@ export const toggleDiscussionLike = async (discussionId, userId) => {
   }
 };
 
-// Funções de Avatar
-export const updateUserAvatar = async (userId, style) => {
+// Deletar uma discussão
+export const deleteDiscussion = async (discussionId, userId) => {
   try {
-    // Usa o ID do usuário como seed para consistência
-    const avatarUrl = `https://api.dicebear.com/7.x/${style}/svg?seed=${encodeURIComponent(
-      userId
-    )}&backgroundType=gradientLinear&backgroundColor=b6e3f4,c0aede,d1d4f9`;
+    // Primeiro verifica se o usuário é dono da discussão
+    const { data: discussion } = await supabase
+      .from("discussions")
+      .select("user_id")
+      .eq("id", discussionId)
+      .single();
 
+    if (!discussion || discussion.user_id !== userId) {
+      throw new Error("Você não tem permissão para excluir esta publicação");
+    }
+
+    // Deleta a discussão
+    const { error } = await supabase
+      .from("discussions")
+      .delete()
+      .eq("id", discussionId);
+
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    console.error("Erro ao deletar discussão:", error);
+    throw error;
+  }
+};
+
+// Funções de Avatar
+export const updateUserAvatar = async (userId, style, seed) => {
+  try {
+    // Gera a URL do avatar com o estilo e seed selecionados
+    const avatarUrl = `https://api.dicebear.com/7.x/${style}/svg?seed=${encodeURIComponent(
+      seed
+    )}`;
+
+    // Atualiza o avatar no auth.users
     const { error } = await supabase.auth.updateUser({
       data: {
         avatar_style: style,
+        avatar_seed: seed,
         avatar_url: avatarUrl,
       },
     });
 
     if (error) throw error;
-    return avatarUrl;
+    return { avatarUrl, style, seed };
   } catch (error) {
     console.error("Erro ao atualizar avatar:", error);
     throw error;

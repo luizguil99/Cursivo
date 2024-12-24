@@ -40,10 +40,9 @@ function OnlineUsers() {
 
       if (error) throw error;
 
-      // Simular status online (você pode implementar a lógica real depois)
       const usersWithStatus = users.map((user) => ({
         ...user,
-        isOnline: Math.random() > 0.5, // Simulação
+        isOnline: Math.random() > 0.5,
       }));
 
       setOnlineUsers(usersWithStatus);
@@ -56,57 +55,57 @@ function OnlineUsers() {
 
   useEffect(() => {
     loadOnlineUsers();
-
-    // Atualizar a cada 30 segundos
-    const interval = setInterval(loadOnlineUsers, 30000);
-
-    return () => clearInterval(interval);
   }, []);
 
   return (
-    <div className="w-72 h-full">
-      <div className="p-4 border-b">
-        <h2 className="font-semibold text-lg">Pessoas</h2>
+    <div className="h-full flex flex-col">
+      <div className="p-4 border-b bg-background/50">
+        <h2 className="font-medium">Pessoas</h2>
         <p className="text-sm text-muted-foreground">
           {onlineUsers.filter((u) => u.isOnline).length} online
         </p>
       </div>
-      <ScrollArea className="h-[calc(100%-4rem)]">
-        <div className="p-2 space-y-1">
-          {onlineUsers
-            .filter((user) => user.id !== currentUser?.id)
-            .map((user) => (
-              <div
-                key={user.id}
-                className="flex items-center gap-3 p-2 rounded-lg hover:bg-accent/50 cursor-pointer transition-colors"
-              >
-                <div className="relative shrink-0">
-                  <Avatar className="h-9 w-9">
-                    <AvatarImage
-                      src={getAvatarUrl(user)}
-                      alt={getDisplayName(user)}
-                    />
-                    <AvatarFallback className="bg-primary/10">
-                      {getInitials(user)}
-                    </AvatarFallback>
-                  </Avatar>
-                  {user.isOnline && (
-                    <Badge
-                      variant="default"
-                      className="absolute -bottom-0.5 -right-0.5 w-3 h-3 p-0 bg-green-500 border-2 border-background"
-                    />
-                  )}
+      <ScrollArea className="flex-1">
+        <div className="p-4 space-y-2">
+          {loading ? (
+            <div className="space-y-4">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-muted animate-pulse" />
+                  <div className="space-y-2">
+                    <div className="h-4 w-24 bg-muted animate-pulse rounded" />
+                  </div>
                 </div>
-                <div className="flex flex-col flex-1 min-w-0">
-                  <span className="text-sm font-medium truncate max-w-[180px]">
-                    {getDisplayName(user)}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {user.isOnline ? "Online" : "Offline"}
-                  </span>
+              ))}
+            </div>
+          ) : (
+            onlineUsers
+              .filter((user) => user.id !== currentUser?.id)
+              .map((user) => (
+                <div key={user.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-accent/50 transition-colors">
+                  <div className="relative">
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage
+                        src={getAvatarUrl(user)}
+                        alt={getDisplayName(user)}
+                      />
+                      <AvatarFallback>{getInitials(user)}</AvatarFallback>
+                    </Avatar>
+                    {user.isOnline && (
+                      <div className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-green-500 ring-2 ring-background" />
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium leading-none">
+                      {getDisplayName(user)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {user.isOnline ? "Online" : "Offline"}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+          )}
         </div>
       </ScrollArea>
     </div>

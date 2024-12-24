@@ -5,37 +5,26 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import {
   MessageSquare,
-  Users,
+  Home,
+  Newspaper,
   MessagesSquare,
-  Settings,
-  HelpCircle,
 } from "lucide-react";
 
 const menuItems = [
   {
-    icon: MessageSquare,
+    icon: Home,
+    label: "Home",
+    path: "/courses",
+  },
+  {
+    icon: Newspaper,
     label: "Publicações",
     path: "/community",
   },
   {
     icon: MessagesSquare,
-    label: "Chat em Tempo Real",
+    label: "Bate Papo",
     path: "/community/discussions",
-  },
-  {
-    icon: Users,
-    label: "Grupos",
-    path: "/community/groups",
-  },
-  {
-    icon: HelpCircle,
-    label: "Ajuda",
-    path: "/community/help",
-  },
-  {
-    icon: Settings,
-    label: "Configurações",
-    path: "/community/settings",
   },
 ];
 
@@ -44,29 +33,31 @@ const CommunitySidebar = () => {
 
   return (
     <div className="h-screen w-64 border-r border-border bg-background">
-      <ScrollArea className="h-full px-4 py-6">
-        <div className="space-y-4">
-          <div className="px-3">
-            <h2 className="mb-2 text-lg font-semibold text-foreground">Comunidade</h2>
-            <p className="text-sm text-muted-foreground">
-              Conecte-se e aprenda com outros estudantes
-            </p>
+      <ScrollArea className="h-full">
+        <div className="p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="h-8 w-8 rounded-lg bg-yellow-500 flex items-center justify-center">
+              <MessageSquare className="h-5 w-5 text-white" />
+            </div>
+            <h2 className="text-xl font-semibold text-foreground">Comunidade</h2>
           </div>
-          <Separator />
+          <p className="text-sm text-muted-foreground mb-6">
+            Conecte-se e aprenda com outros estudantes
+          </p>
+          <Separator className="mb-6" />
           <nav className="space-y-2">
             {menuItems.map((item) => (
               <Link key={item.path} to={item.path}>
                 <Button
                   variant={location.pathname === item.path ? "secondary" : "ghost"}
-                  className="w-full justify-start gap-2"
+                  className="w-full justify-start gap-3 h-11"
                 >
-                  <item.icon className="h-4 w-4" />
-                  <span className="text-foreground">{item.label}</span>
+                  <item.icon className="h-5 w-5" />
+                  <span className="text-base font-medium">{item.label}</span>
                 </Button>
               </Link>
             ))}
           </nav>
-          <Separator />
         </div>
       </ScrollArea>
     </div>

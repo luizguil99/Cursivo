@@ -222,50 +222,49 @@ function LiveChat() {
 
     console.log("Configurando Realtime...");
 
-    const channel = supabase.channel("schema-db-changes")
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "chat_messages",
-        },
-        async (payload) => {
-          console.log("Nova mensagem detectada:", payload);
+    const channel = supabase.channel("schema-db-changes").on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "chat_messages",
+      },
+      async (payload) => {
+        console.log("Nova mensagem detectada:", payload);
 
-          // Verificar se a mensagem já existe
-          setMessages((prev) => {
-            const exists = prev.some((msg) => msg.id === payload.new.id);
-            if (exists) {
-              console.log("Mensagem já existe, ignorando...");
-              return prev;
-            }
-
-            // Se for mensagem do usuário atual, não adicionar novamente
-            if (payload.new.user_id === currentUser?.id) {
-              console.log("Mensagem do usuário atual, ignorando...");
-              return prev;
-            }
-
-            // Buscar dados do perfil e adicionar mensagem
-            supabase
-              .from("perfis")
-              .select("*")
-              .eq("id", payload.new.user_id)
-              .single()
-              .then(({ data: userData }) => {
-                const newMessage = {
-                  ...payload.new,
-                  perfil: userData || currentUser,
-                };
-                setMessages((current) => [...current, newMessage]);
-                setTimeout(scrollToBottom, 100);
-              });
-
+        // Verificar se a mensagem já existe
+        setMessages((prev) => {
+          const exists = prev.some((msg) => msg.id === payload.new.id);
+          if (exists) {
+            console.log("Mensagem já existe, ignorando...");
             return prev;
-          });
-        }
-      );
+          }
+
+          // Se for mensagem do usuário atual, não adicionar novamente
+          if (payload.new.user_id === currentUser?.id) {
+            console.log("Mensagem do usuário atual, ignorando...");
+            return prev;
+          }
+
+          // Buscar dados do perfil e adicionar mensagem
+          supabase
+            .from("perfis")
+            .select("*")
+            .eq("id", payload.new.user_id)
+            .single()
+            .then(({ data: userData }) => {
+              const newMessage = {
+                ...payload.new,
+                perfil: userData || currentUser,
+              };
+              setMessages((current) => [...current, newMessage]);
+              setTimeout(scrollToBottom, 100);
+            });
+
+          return prev;
+        });
+      }
+    );
 
     channel.subscribe((status) => {
       if (status === "SUBSCRIBED") {
@@ -557,37 +556,12 @@ function LiveChat() {
   };
 
   return (
-    <div className="flex flex-col h-full">
-      <ChatRules
-        isOpen={showInitialRules}
-        onClose={() => setShowInitialRules(false)}
-        isInitialPopup={true}
-      />
-      <ChatRules
-        isOpen={showRules}
-        onClose={() => setShowRules(false)}
-        isInitialPopup={false}
-      />
-      <div className="px-6 py-4 border-b flex items-center justify-between bg-background/50 backdrop-blur-sm">
-        <div className="flex items-center gap-3">
-          <h2 className="font-semibold text-lg">Chat em Grupo</h2>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowRules(true)}
-            className="text-muted-foreground hover:text-foreground"
-          >
-            <Info className="h-4 w-4 mr-2" />
-            Regras do Chat
-          </Button>
-          <span className="text-sm text-muted-foreground">
-            {messages.length} mensagens
-          </span>
-        </div>
+    <div className="h-full flex flex-col">
+      <div className="p-4 border-b bg-background/50">
+        <h2 className="font-medium">Chat em Grupo</h2>
       </div>
-
-      <ScrollArea className="flex-1 px-4" ref={scrollRef}>
-        <div className="py-6 space-y-6">
+      <ScrollArea className="flex-1">
+        <div className="p-4 space-y-6">
           {loading ? (
             <div className="space-y-6">
               {[...Array(3)].map((_, i) => (
@@ -859,7 +833,7 @@ function LiveChat() {
                 )}
               </div>
             ) : (
-              <div className="flex items-center gap-2 bg-accent/50 rounded-full px-4 py-1">
+              <div className="flex items-center gap-2 bg-accent/50 rounded-full px-4 py-1 group focus-within:ring-1 focus-within:ring-yellow-500">
                 <Input
                   ref={inputRef}
                   type="text"
