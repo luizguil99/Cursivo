@@ -20,12 +20,23 @@ import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/components/theme-provider";
+import { supabase } from "@/lib/supabase";
 
 // Componente para a bolinha pulsante
-const PulsingDot = () => (
+const PulsingDot = ({ isActive }) => (
   <span className="relative flex h-2 w-2">
-    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-    <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+    <span
+      className={cn(
+        "animate-ping absolute inline-flex h-full w-full rounded-full opacity-75",
+        isActive ? "bg-green-400" : "bg-red-400"
+      )}
+    ></span>
+    <span
+      className={cn(
+        "relative inline-flex rounded-full h-2 w-2",
+        isActive ? "bg-green-500" : "bg-red-500"
+      )}
+    ></span>
   </span>
 );
 
@@ -34,6 +45,7 @@ function Sidebar({ onCourseSelect, onScheduleClick, onModuleSidebarToggle }) {
   const [showCourses, setShowCourses] = React.useState(false);
   const [showMobileMenu, setShowMobileMenu] = React.useState(false);
   const [showSchedule, setShowSchedule] = React.useState(false);
+  const [hasLiveEvent, setHasLiveEvent] = React.useState(false);
   const navigate = useNavigate();
   const { logout } = useAuth();
   const { theme } = useTheme();
@@ -66,6 +78,34 @@ function Sidebar({ onCourseSelect, onScheduleClick, onModuleSidebarToggle }) {
       setShowCourses(!showCourses);
     }
   };
+
+  // Verificar se há eventos ativos
+  React.useEffect(() => {
+    const checkLiveEvents = async () => {
+      try {
+        const now = new Date().toISOString();
+        const { data, error } = await supabase
+          .from("live_classes")
+          .select("*")
+          .lte("start_time", now)
+          .gte("end_time", now)
+          .single();
+
+        if (error && error.code !== "PGRST116") {
+          console.error("Erro ao verificar eventos ao vivo:", error);
+          return;
+        }
+
+        setHasLiveEvent(!!data);
+      } catch (error) {
+        console.error("Erro ao verificar eventos ao vivo:", error);
+      }
+    };
+
+    checkLiveEvents();
+    const interval = setInterval(checkLiveEvents, 30000); // Verifica a cada 30 segundos
+    return () => clearInterval(interval);
+  }, []);
 
   const mainButtons = [
     {
@@ -116,7 +156,7 @@ function Sidebar({ onCourseSelect, onScheduleClick, onModuleSidebarToggle }) {
       icon: <Video className="h-5 w-5" />,
       label: "Aula ao Vivo",
       onClick: () => navigate("/live"),
-      extra: <PulsingDot />,
+      extra: <PulsingDot isActive={hasLiveEvent} />,
     },
     {
       icon: <Brain className="h-5 w-5" />,
@@ -244,9 +284,7 @@ function Sidebar({ onCourseSelect, onScheduleClick, onModuleSidebarToggle }) {
             )}
           />
           {!collapsed && (
-            <span className="text-sm font-medium truncate">
-              Sair
-            </span>
+            <span className="text-sm font-medium truncate">Sair</span>
           )}
         </Button>
       </div>

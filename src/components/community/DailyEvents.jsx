@@ -4,8 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Calendar, Users, Sparkles, ExternalLink } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/ui/use-toast";
+import cn from "classnames";
 
-function DailyEvents() {
+function DailyEvents({ className, noMargin }) {
   const { toast } = useToast();
   const [showEvents, setShowEvents] = useState(true);
   const [events, setEvents] = useState([]);
@@ -144,7 +145,11 @@ function DailyEvents() {
   if (!showEvents) return null;
 
   return (
-    <Card className="mt-4 mx-4 mb-4">
+    <Card className={cn(
+      "mt-4 mx-4 mb-4",
+      noMargin && "!m-0 w-full",
+      className
+    )}>
       <div className="p-3 border-b border-border">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">

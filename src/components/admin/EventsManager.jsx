@@ -537,9 +537,9 @@ function EventsManager() {
                   <TableCell colSpan={6} className="text-center py-8">
                     <div className="flex flex-col items-center gap-2 text-muted-foreground">
                       <Calendar className="h-8 w-8" />
-                      <p>Nenhuma aula agendada</p>
+                      <p>Nenhum evento agendado</p>
                       <p className="text-sm">
-                        Clique em "Nova Aula" para agendar uma aula
+                        Clique em "Novo Evento" para adicionar
                       </p>
                     </div>
                   </TableCell>
