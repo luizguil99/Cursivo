@@ -8,10 +8,8 @@ import {
   GraduationCap,
   LineChart,
   Users,
-  Library,
   Brain,
-  Target,
-  Lightbulb,
+  Video,
   Home,
   ListTodo,
   X,
@@ -22,6 +20,14 @@ import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/components/theme-provider";
+
+// Componente para a bolinha pulsante
+const PulsingDot = () => (
+  <span className="relative flex h-2 w-2">
+    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+    <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+  </span>
+);
 
 function Sidebar({ onCourseSelect, onScheduleClick, onModuleSidebarToggle }) {
   const [collapsed, setCollapsed] = React.useState(false);
@@ -107,24 +113,15 @@ function Sidebar({ onCourseSelect, onScheduleClick, onModuleSidebarToggle }) {
       onClick: () => navigate("/community"),
     },
     {
-      icon: <Library className="h-5 w-5" />,
-      label: "Recursos",
-      onClick: () => navigate("/resources"),
+      icon: <Video className="h-5 w-5" />,
+      label: "Aula ao Vivo",
+      onClick: () => navigate("/live"),
+      extra: <PulsingDot />,
     },
     {
       icon: <Brain className="h-5 w-5" />,
       label: "Simulados",
       onClick: () => navigate("/simulations"),
-    },
-    {
-      icon: <Target className="h-5 w-5" />,
-      label: "Metas",
-      onClick: () => navigate("/goals"),
-    },
-    {
-      icon: <Lightbulb className="h-5 w-5" />,
-      label: "Ferramentas",
-      onClick: () => navigate("/tools"),
     },
     {
       icon: <ListTodo className="h-5 w-5" />,
@@ -201,23 +198,27 @@ function Sidebar({ onCourseSelect, onScheduleClick, onModuleSidebarToggle }) {
                 ),
               })}
               {!collapsed && (
-                <span className="text-[10px] sm:text-xs md:text-sm font-medium truncate">
-                  {button.label}
-                </span>
+                <div className="flex items-center justify-between flex-1">
+                  <span className="text-[10px] sm:text-xs md:text-sm font-medium truncate">
+                    {button.label}
+                  </span>
+                  {button.extra && <div className="ml-2">{button.extra}</div>}
+                </div>
               )}
             </Button>
           ))}
         </div>
 
         {/* Course List */}
-        <div className={cn(
-          "transition-all duration-300 overflow-hidden",
-          showCourses && !collapsed ? "opacity-100 h-auto" : "opacity-0 h-0"
-        )}>
+        <div
+          className={cn(
+            "transition-all duration-300 overflow-hidden",
+            showCourses && !collapsed ? "opacity-100 h-auto" : "opacity-0 h-0"
+          )}
+        >
           <Separator className="my-1.5 sm:my-2" />
           <CourseList onCourseSelect={handleCourseSelect} />
         </div>
-
       </div>
 
       {/* Logout Button */}
