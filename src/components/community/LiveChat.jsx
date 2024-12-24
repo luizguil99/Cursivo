@@ -65,7 +65,7 @@ function LiveChat() {
   });
   const [showRules, setShowRules] = useState(false);
   const [showInitialRules, setShowInitialRules] = useState(() => {
-    return !localStorage.getItem('chatRulesAccepted');
+    return !localStorage.getItem("chatRulesAccepted");
   });
   const scrollRef = useRef(null);
   const messagesEndRef = useRef(null);
@@ -113,15 +113,68 @@ function LiveChat() {
       });
       return;
     }
-    // ... resto do código de envio de mensagem
+
+    if (!newMessage.trim() && !selectedFile) return;
+
+    try {
+      setLoading(true);
+      let attachment_url = null;
+      let attachment_type = null;
+      let attachment_name = null;
+
+      if (selectedFile) {
+        setUploading(true);
+        const fileName = `${Date.now()}-${selectedFile.name}`;
+        const { error: uploadError } = await supabase.storage
+          .from("chat-attachments")
+          .upload(fileName, selectedFile);
+
+        if (uploadError) throw uploadError;
+
+        const { data: urlData } = await supabase.storage
+          .from("chat-attachments")
+          .getPublicUrl(fileName);
+
+        attachment_url = urlData.publicUrl;
+        attachment_type = selectedFile.type;
+        attachment_name = selectedFile.name;
+      }
+
+      const { error: insertError } = await supabase
+        .from("chat_messages")
+        .insert([
+          {
+            message: newMessage.trim(),
+            user_id: currentUser.id,
+            attachment_url,
+            attachment_type,
+            attachment_name,
+          },
+        ]);
+
+      if (insertError) throw insertError;
+
+      setNewMessage("");
+      setSelectedFile(null);
+      setPreviewUrl(null);
+      inputRef.current?.focus();
+    } catch (error) {
+      console.error("Erro ao enviar mensagem:", error);
+      toast({
+        title: "Erro ao enviar mensagem",
+        description: "Não foi possível enviar sua mensagem",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+      setUploading(false);
+    }
   };
 
-  // Função para rolar para a última mensagem
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  // Função para carregar mensagens
   const loadMessages = async () => {
     try {
       setLoading(true);
@@ -167,8 +220,9 @@ function LiveChat() {
       initialLoadRef.current = true;
     }
 
-    const channel = supabase
-      .channel("chat_messages")
+    console.log("Configurando Realtime...");
+
+    const channel = supabase.channel("schema-db-changes")
       .on(
         "postgres_changes",
         {
@@ -177,31 +231,54 @@ function LiveChat() {
           table: "chat_messages",
         },
         async (payload) => {
-          if (payload.new.user_id !== currentUser?.id) {
-            const { data: userData } = await supabase
+          console.log("Nova mensagem detectada:", payload);
+
+          // Verificar se a mensagem já existe
+          setMessages((prev) => {
+            const exists = prev.some((msg) => msg.id === payload.new.id);
+            if (exists) {
+              console.log("Mensagem já existe, ignorando...");
+              return prev;
+            }
+
+            // Se for mensagem do usuário atual, não adicionar novamente
+            if (payload.new.user_id === currentUser?.id) {
+              console.log("Mensagem do usuário atual, ignorando...");
+              return prev;
+            }
+
+            // Buscar dados do perfil e adicionar mensagem
+            supabase
               .from("perfis")
               .select("*")
               .eq("id", payload.new.user_id)
-              .single();
+              .single()
+              .then(({ data: userData }) => {
+                const newMessage = {
+                  ...payload.new,
+                  perfil: userData || currentUser,
+                };
+                setMessages((current) => [...current, newMessage]);
+                setTimeout(scrollToBottom, 100);
+              });
 
-            const newMessage = {
-              ...payload.new,
-              perfil: userData,
-            };
-
-            setMessages((prev) => [...prev, newMessage]);
-            setTimeout(scrollToBottom, 100);
-          }
+            return prev;
+          });
         }
-      )
-      .subscribe();
+      );
+
+    channel.subscribe((status) => {
+      if (status === "SUBSCRIBED") {
+        console.log("Canal Realtime conectado com sucesso");
+      }
+    });
 
     return () => {
+      console.log("Desconectando do Realtime...");
       supabase.removeChannel(channel);
     };
   }, [currentUser?.id]);
 
-  // Função para enviar mensagem
   const uploadFile = async (file) => {
     try {
       if (file.size > MAX_FILE_SIZE) {
@@ -285,16 +362,24 @@ function LiveChat() {
   const sendMessage = async () => {
     if ((!newMessage.trim() && !selectedFile) || loading) return;
 
+    if (isBanned) {
+      toast({
+        variant: "destructive",
+        title: "Acesso bloqueado",
+        description: "Você foi banido do chat por violar as regras.",
+      });
+      return;
+    }
+
     const messageContent = newMessage.trim();
     const fileToUpload = selectedFile;
 
-    // Limpar inputs imediatamente
     setNewMessage("");
     removeSelectedFile();
 
-    // Criar mensagem temporária
+    const tempId = `temp_${Date.now()}`;
     const tempMessage = {
-      id: Date.now().toString(),
+      id: tempId,
       message: messageContent,
       user_id: currentUser?.id,
       created_at: new Date().toISOString(),
@@ -306,7 +391,6 @@ function LiveChat() {
       attachment_name: fileToUpload?.name,
     };
 
-    // Atualizar UI imediatamente
     setMessages((prev) => [...prev, tempMessage]);
     setTimeout(scrollToBottom, 100);
 
@@ -314,10 +398,15 @@ function LiveChat() {
       let attachment = null;
       if (fileToUpload) {
         attachment = await uploadFile(fileToUpload);
-        if (!attachment) return;
+        if (!attachment) {
+          setMessages((prev) => prev.filter((msg) => msg.id !== tempId));
+          return;
+        }
       }
 
-      const { data: message, error } = await supabase
+      console.log("Enviando mensagem para o Supabase...");
+
+      const { data, error } = await supabase
         .from("chat_messages")
         .insert({
           message: messageContent,
@@ -331,22 +420,25 @@ function LiveChat() {
 
       if (error) throw error;
 
-      const messageWithUser = {
-        ...message,
-        perfil: currentUser,
-      };
+      console.log("Mensagem enviada com sucesso:", data);
 
-      setMessages((prev) =>
-        prev.map((msg) => (msg.id === tempMessage.id ? messageWithUser : msg))
-      );
+      // Atualizar a mensagem temporária com a real
+      setMessages((prev) => {
+        const withoutTemp = prev.filter((msg) => msg.id !== tempId);
+        return [...withoutTemp, { ...data, perfil: currentUser }];
+      });
     } catch (error) {
       console.error("Erro ao enviar mensagem:", error);
-      setMessages((prev) => prev.filter((msg) => msg.id !== tempMessage.id));
+      setMessages((prev) => prev.filter((msg) => msg.id !== tempId));
       toast({
         title: "Erro ao enviar mensagem",
-        description: "Não foi possível enviar sua mensagem",
+        description: "Tente novamente mais tarde",
         variant: "destructive",
       });
+      setNewMessage(messageContent);
+      if (fileToUpload) {
+        setSelectedFile(fileToUpload);
+      }
     }
   };
 
@@ -382,7 +474,10 @@ function LiveChat() {
         ...prev,
         [messageId]: !prev[messageId],
       };
-      localStorage.setItem(`likedMessages_${currentUser?.id}`, JSON.stringify(newLikes));
+      localStorage.setItem(
+        `likedMessages_${currentUser?.id}`,
+        JSON.stringify(newLikes)
+      );
       return newLikes;
     });
   };
@@ -463,14 +558,14 @@ function LiveChat() {
 
   return (
     <div className="flex flex-col h-full">
-      <ChatRules 
-        isOpen={showInitialRules} 
-        onClose={() => setShowInitialRules(false)} 
-        isInitialPopup={true} 
+      <ChatRules
+        isOpen={showInitialRules}
+        onClose={() => setShowInitialRules(false)}
+        isInitialPopup={true}
       />
-      <ChatRules 
-        isOpen={showRules} 
-        onClose={() => setShowRules(false)} 
+      <ChatRules
+        isOpen={showRules}
+        onClose={() => setShowRules(false)}
         isInitialPopup={false}
       />
       <div className="px-6 py-4 border-b flex items-center justify-between bg-background/50 backdrop-blur-sm">
@@ -614,7 +709,8 @@ function LiveChat() {
                             onClick={() => handleLikeMessage(msg.id)}
                             className={cn(
                               "opacity-0 group-hover:opacity-100 transition-opacity",
-                              likedMessages[msg.id] && "opacity-100 text-[#FFCE00]"
+                              likedMessages[msg.id] &&
+                                "opacity-100 text-[#FFCE00]"
                             )}
                           >
                             {likedMessages[msg.id] ? (
@@ -637,14 +733,18 @@ function LiveChat() {
                               <DropdownMenuContent>
                                 {bannedUsers.includes(msg.perfil?.id) ? (
                                   <DropdownMenuItem
-                                    onClick={() => handleUnbanUser(msg.perfil?.id)}
+                                    onClick={() =>
+                                      handleUnbanUser(msg.perfil?.id)
+                                    }
                                   >
                                     <Ban className="h-4 w-4 mr-2" />
                                     Desbanir Usuário
                                   </DropdownMenuItem>
                                 ) : (
                                   <DropdownMenuItem
-                                    onClick={() => handleBanUser(msg.perfil?.id)}
+                                    onClick={() =>
+                                      handleBanUser(msg.perfil?.id)
+                                    }
                                     className="text-red-500"
                                   >
                                     <Ban className="h-4 w-4 mr-2" />
@@ -770,7 +870,7 @@ function LiveChat() {
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
-                      handleSendMessage(e);
+                      sendMessage();
                     }
                   }}
                 />
@@ -799,7 +899,7 @@ function LiveChat() {
           <Button
             type="submit"
             size="icon"
-            onClick={handleSendMessage}
+            onClick={sendMessage}
             disabled={(!newMessage.trim() && !selectedFile) || loading}
           >
             <Send className="h-5 w-5" />
