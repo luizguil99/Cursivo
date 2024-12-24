@@ -26,6 +26,7 @@ import Discussions from "./pages/community/Discussions";
 import { CommunityProvider } from "@/contexts/CommunityContext";
 import DiscussionDetails from "./pages/DiscussionDetails";
 import FilterQuestions from "./components/filterquestions/FilterQuestions";
+import LivePage from "./pages/live";
 
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>
@@ -190,6 +191,14 @@ createRoot(document.getElementById("root")).render(
                     <AdminRoute>
                       <AdminEvents />
                     </AdminRoute>
+                  }
+                />
+                <Route
+                  path="/live"
+                  element={
+                    <PrivateRoute>
+                      <LivePage />
+                    </PrivateRoute>
                   }
                 />
               </Routes>

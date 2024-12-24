@@ -16,6 +16,7 @@ import SimulationHistory from "@/pages/SimulationHistory";
 import SimulationExam from "@/pages/SimulationExam";
 import Community from "@/pages/Community";
 import FilterQuestions from "./components/FilterQuestions";
+import LivePage from "@/pages/live";
 
 export default function Routes() {
   return (
@@ -25,8 +26,6 @@ export default function Routes() {
       <Route path="/access-denied" element={<AccessDenied />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/update-password" element={<UpdatePassword />} />
-
-      
 
       {/* Rotas de cursos */}
       <Route path="/" element={<Courses />} />
@@ -39,6 +38,7 @@ export default function Routes() {
       />
       <Route path="/study-guide" element={<StudyGuide />} />
       <Route path="/performance" element={<Performance />} />
+      <Route path="/live" element={<LivePage />} />
 
       {/* Rotas de simulados */}
       <Route path="/simulations/history" element={<SimulationHistory />} />
@@ -49,8 +49,6 @@ export default function Routes() {
 
      {/* Rota para filtro de questoes */}
       <Route path="/filterquestions" element={<FilterQuestions />} />
-
-      
 
       {/* Rotas administrativas */}
       <Route path="/admin" element={<AdminDashboard />} />

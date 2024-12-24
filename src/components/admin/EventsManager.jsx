@@ -19,7 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Calendar, Users, Plus, Trash2, Edit } from "lucide-react";
+import { Calendar, Users, Plus, Trash2, Edit, Video, VideoOff, MessageSquare } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/lib/supabase"; // Certifique-se de que este caminho está correto
 
@@ -29,6 +29,14 @@ function EventsManager() {
   const [events, setEvents] = React.useState([]);
   const [editingEvent, setEditingEvent] = React.useState(null);
   const [isDialogOpen, setIsDialogOpen] = React.useState(false);
+  const [selectedProvider, setSelectedProvider] = React.useState('zoom');
+  const [meetConfig, setMeetConfig] = React.useState({
+    title: '',
+    description: '',
+    meet_link: '',
+    start_time: '',
+    end_time: '',
+  });
 
   // Carregar eventos e configuração ao montar o componente
   React.useEffect(() => {
@@ -208,8 +216,122 @@ function EventsManager() {
     }
   };
 
+  // Função para criar aula no Google Meet
+  const createMeetClass = async () => {
+    try {
+      // Validações básicas
+      if (!meetConfig.title || !meetConfig.meet_link || !meetConfig.start_time || !meetConfig.end_time) {
+        toast({
+          title: "Campos Obrigatórios",
+          description: "Preencha todos os campos obrigatórios.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Converte as datas para UTC mantendo o horário local
+      const startTime = new Date(meetConfig.start_time);
+      const endTime = new Date(meetConfig.end_time);
+
+      if (endTime <= startTime) {
+        toast({
+          title: "Horário Inválido",
+          description: "O horário de término deve ser posterior ao início.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Formata as datas no formato ISO com o fuso horário correto
+      const formattedStartTime = startTime.toISOString();
+      const formattedEndTime = endTime.toISOString();
+
+      console.log('Criando aula com horários:', {
+        start: formattedStartTime,
+        end: formattedEndTime,
+        localStart: startTime.toLocaleString('pt-BR'),
+        localEnd: endTime.toLocaleString('pt-BR')
+      });
+
+      const { error } = await supabase
+        .from('live_classes')
+        .insert([{
+          title: meetConfig.title,
+          description: meetConfig.description,
+          meet_link: meetConfig.meet_link,
+          start_time: formattedStartTime,
+          end_time: formattedEndTime,
+          created_at: new Date().toISOString(),
+        }]);
+
+      if (error) throw error;
+
+      toast({
+        title: "Aula Criada",
+        description: "A aula do Google Meet foi criada com sucesso!",
+      });
+
+      setIsDialogOpen(false);
+      setMeetConfig({
+        title: '',
+        description: '',
+        meet_link: '',
+        start_time: '',
+        end_time: '',
+      });
+    } catch (error) {
+      console.error('Erro ao criar aula:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível criar a aula.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Função para alternar entre os provedores
+  const handleProviderChange = (provider) => {
+    setSelectedProvider(provider);
+    if (provider === 'meet') {
+      setIsDialogOpen(true);
+    }
+  };
+
   return (
     <div className="space-y-6">
+      {/* Seleção de Provedores de Videoconferência */}
+      <Card className="p-6">
+        <h2 className="text-xl font-semibold mb-4">Provedores de Videoconferência</h2>
+        <div className="flex flex-wrap gap-4">
+          <Button
+            variant={selectedProvider === 'zoom' ? 'default' : 'outline'}
+            className="flex items-center gap-2"
+            onClick={() => handleProviderChange('zoom')}
+          >
+            <Video className="w-4 h-4" />
+            Zoom
+          </Button>
+          
+          <Button
+            variant={selectedProvider === 'meet' ? 'default' : 'outline'}
+            className="flex items-center gap-2"
+            onClick={() => handleProviderChange('meet')}
+          >
+            <MessageSquare className="w-4 h-4" />
+            Google Meet
+          </Button>
+          
+          <Button
+            variant={selectedProvider === 'teams' ? 'default' : 'outline'}
+            className="flex items-center gap-2"
+            onClick={() => handleProviderChange('teams')}
+          >
+            <Video className="w-4 h-4" />
+            Microsoft Teams
+          </Button>
+        </div>
+      </Card>
+
       <Card className="p-4">
         <div className="flex items-center justify-between border-b pb-4 mb-4">
           <div className="space-y-0.5">
@@ -227,7 +349,7 @@ function EventsManager() {
         
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-medium">Eventos Ativos</h3>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <Dialog open={isDialogOpen && selectedProvider !== 'meet'} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
               <Button size="sm" className="bg-yellow-500 hover:bg-yellow-600 text-white">
                 <Plus className="h-4 w-4 mr-2" />
@@ -302,6 +424,71 @@ function EventsManager() {
             </DialogContent>
           </Dialog>
         </div>
+
+        <Dialog open={isDialogOpen && selectedProvider === 'meet'} onOpenChange={setIsDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Criar Nova Aula no Google Meet</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="title">Título da Aula</Label>
+                <Input
+                  id="title"
+                  value={meetConfig.title}
+                  onChange={(e) => setMeetConfig({ ...meetConfig, title: e.target.value })}
+                  placeholder="Ex: Aula de Matemática"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="description">Descrição (opcional)</Label>
+                <Input
+                  id="description"
+                  value={meetConfig.description}
+                  onChange={(e) => setMeetConfig({ ...meetConfig, description: e.target.value })}
+                  placeholder="Ex: Revisão para a prova"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="meet_link">Link do Google Meet</Label>
+                <Input
+                  id="meet_link"
+                  value={meetConfig.meet_link}
+                  onChange={(e) => setMeetConfig({ ...meetConfig, meet_link: e.target.value })}
+                  placeholder="https://meet.google.com/..."
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="start_time">Início</Label>
+                  <Input
+                    id="start_time"
+                    type="datetime-local"
+                    value={meetConfig.start_time}
+                    onChange={(e) => setMeetConfig({ ...meetConfig, start_time: e.target.value })}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="end_time">Término</Label>
+                  <Input
+                    id="end_time"
+                    type="datetime-local"
+                    value={meetConfig.end_time}
+                    onChange={(e) => setMeetConfig({ ...meetConfig, end_time: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <Button onClick={createMeetClass} className="w-full">
+                Criar Aula
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         <div className="mt-4">
           <Table>
