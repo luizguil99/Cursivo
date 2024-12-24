@@ -135,14 +135,15 @@ function Sidebar({ onCourseSelect, onScheduleClick, onModuleSidebarToggle }) {
       className={cn(
         "relative h-screen bg-card transition-all duration-300 flex flex-col border-r",
         // Em dispositivos menores, sempre mostra como fechado
-        "w-10 md:w-auto",
+        "w-12", // Largura fixa para mobile
         // Larguras responsivas ajustadas para telas maiores
-        collapsed ? "md:w-14" : "md:w-56"
+        "md:w-auto",
+        collapsed ? "md:w-16" : "md:w-60"
       )}
     >
       <div className="flex items-center justify-between p-2 h-10 sm:h-12 md:h-14 border-b">
         {!collapsed && (
-          <h2 className="hidden md:block text-sm sm:text-base md:text-lg font-semibold truncate">
+          <h2 className="hidden md:block text-sm sm:text-base md:text-lg font-semibold truncate pl-2">
             Menu
           </h2>
         )}
@@ -152,7 +153,7 @@ function Sidebar({ onCourseSelect, onScheduleClick, onModuleSidebarToggle }) {
           className={cn(
             "h-6 w-6 shrink-0",
             "hidden md:flex",
-            collapsed && "mx-auto"
+            collapsed ? "mx-auto" : "ml-auto"
           )}
           onClick={() => setCollapsed(!collapsed)}
         >
@@ -169,10 +170,10 @@ function Sidebar({ onCourseSelect, onScheduleClick, onModuleSidebarToggle }) {
       <div
         className={cn(
           "flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-[#F3C92C] scrollbar-track-transparent hover:scrollbar-thumb-[#B4902A]",
-          collapsed ? "space-y-2 p-1.5" : "space-y-0.5 p-1.5 sm:p-2 md:p-4"
+          collapsed ? "space-y-1.5 p-1.5" : "space-y-1 p-2"
         )}
       >
-        <div className={cn("space-y-0.5", collapsed && "space-y-2")}>
+        <div className={cn("space-y-1", collapsed && "space-y-1.5")}>
           {mainButtons.map((button, index) => (
             <Button
               key={index}
@@ -180,8 +181,8 @@ function Sidebar({ onCourseSelect, onScheduleClick, onModuleSidebarToggle }) {
               className={cn(
                 "w-full flex items-center h-auto",
                 collapsed
-                  ? "px-1 py-2"
-                  : "gap-1 sm:gap-1.5 md:gap-2 py-1 sm:py-1.5 md:py-2 px-2",
+                  ? "px-1.5 py-1.5"
+                  : "gap-1.5 py-1.5 px-2",
                 "justify-center md:justify-start",
                 collapsed && "md:justify-center"
               )}
@@ -198,7 +199,12 @@ function Sidebar({ onCourseSelect, onScheduleClick, onModuleSidebarToggle }) {
                 ),
               })}
               {!collapsed && (
-                <div className="flex items-center justify-between flex-1">
+                <div
+                  className={cn(
+                    "flex items-center justify-between flex-1",
+                    "hidden md:flex" // Oculta em mobile, mostra em desktop
+                  )}
+                >
                   <span className="text-[10px] sm:text-xs md:text-sm font-medium truncate">
                     {button.label}
                   </span>
