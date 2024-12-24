@@ -570,7 +570,7 @@ function CourseContent({ lesson, onVideoEnd, updateSidebarCompletion }) {
             {/* Coluna de Notificações */}
             <div className="w-full lg:w-80 lg:flex lg:flex-col lg:gap-4">
               {/* Notificações */}
-              <div className="rounded-lg p-4 sm:p-6 border bg-card text-card-foreground">
+              <div className="rounded-lg p-4 sm:p-6 border bg-card text-card-foreground mb-4 lg:mb-0">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-base sm:text-lg font-semibold">
                     Notificações
@@ -612,7 +612,9 @@ function CourseContent({ lesson, onVideoEnd, updateSidebarCompletion }) {
               </div>
 
               {/* Eventos */}
-              <DailyEvents noMargin />
+              <div className="mt-4 lg:mt-0">
+                <DailyEvents noMargin />
+              </div>
             </div>
           </div>
         </div>
