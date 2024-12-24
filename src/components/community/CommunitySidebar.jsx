@@ -39,7 +39,7 @@ const CommunitySidebar = () => {
             <div className="h-8 w-8 rounded-lg bg-yellow-500 flex items-center justify-center">
               <MessageSquare className="h-5 w-5 text-white" />
             </div>
-            <h2 className="text-xl font-semibold text-foreground">Comunidade</h2>
+            <h2 className="text-lg font-semibold text-foreground">Comunidade</h2>
           </div>
           <p className="text-sm text-muted-foreground mb-6">
             Conecte-se e aprenda com outros estudantes
@@ -50,10 +50,10 @@ const CommunitySidebar = () => {
               <Link key={item.path} to={item.path}>
                 <Button
                   variant={location.pathname === item.path ? "secondary" : "ghost"}
-                  className="w-full justify-start gap-3 h-11"
+                  className="w-full justify-start gap-3 h-11 text-sm"
                 >
                   <item.icon className="h-5 w-5" />
-                  <span className="text-base font-medium">{item.label}</span>
+                  <span className="text-sm font-medium">{item.label}</span>
                 </Button>
               </Link>
             ))}

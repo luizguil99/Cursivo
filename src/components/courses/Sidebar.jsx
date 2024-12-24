@@ -45,15 +45,42 @@ function Sidebar({ onCourseSelect, onScheduleClick, onModuleSidebarToggle }) {
   const [showCourses, setShowCourses] = React.useState(false);
   const [showMobileMenu, setShowMobileMenu] = React.useState(false);
   const [showSchedule, setShowSchedule] = React.useState(false);
-  const [hasLiveEvent, setHasLiveEvent] = React.useState(false);
+  const [hasLiveEvent, setHasLiveEvent] = React.useState(() => {
+    try {
+      const cached = localStorage.getItem('liveEventStatus');
+      if (cached) {
+        const { value, expiry } = JSON.parse(cached);
+        if (expiry > new Date().getTime()) {
+          return value;
+        } else {
+          localStorage.removeItem('liveEventStatus');
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao ler cache:', error);
+    }
+    return false;
+  });
+  
   const navigate = useNavigate();
   const { logout } = useAuth();
   const { theme } = useTheme();
-  const isMobile = window.innerWidth < 768;
+
+  const cacheEventStatus = (status) => {
+    try {
+      const item = {
+        value: status,
+        expiry: new Date().getTime() + (5 * 60 * 1000) // 5 minutos
+      };
+      localStorage.setItem('liveEventStatus', JSON.stringify(item));
+    } catch (error) {
+      console.error('Erro ao salvar cache:', error);
+    }
+  };
 
   const handleCourseSelect = (course) => {
     onCourseSelect(course);
-    if (isMobile) {
+    if (window.innerWidth < 768) {
       setShowMobileMenu(false);
       // Força a abertura do ModulesSidebar quando um curso é selecionado
       onModuleSidebarToggle(false); // false significa não colapsado
@@ -96,13 +123,20 @@ function Sidebar({ onCourseSelect, onScheduleClick, onModuleSidebarToggle }) {
           return;
         }
 
-        setHasLiveEvent(!!data);
+        const newStatus = !!data;
+        setHasLiveEvent(newStatus);
+        cacheEventStatus(newStatus);
       } catch (error) {
         console.error("Erro ao verificar eventos ao vivo:", error);
       }
     };
 
-    checkLiveEvents();
+    // Só faz a verificação se não tiver cache válido
+    const cached = localStorage.getItem('liveEventStatus');
+    if (!cached) {
+      checkLiveEvents();
+    }
+    
     const interval = setInterval(checkLiveEvents, 30000); // Verifica a cada 30 segundos
     return () => clearInterval(interval);
   }, []);
@@ -169,6 +203,8 @@ function Sidebar({ onCourseSelect, onScheduleClick, onModuleSidebarToggle }) {
       onClick: () => navigate("/filterquestions"),
     },
   ];
+
+  const isMobile = window.innerWidth < 768;
 
   return (
     <aside
