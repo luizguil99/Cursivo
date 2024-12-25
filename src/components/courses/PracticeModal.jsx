@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/lib/supabase";
 import AIChat from "./AIChat";
+import confetti from 'canvas-confetti';
 
 function PracticeModal({ course, topic, onClose }) {
   const [currentQuestion, setCurrentQuestion] = useState(0);
@@ -144,6 +145,12 @@ function PracticeModal({ course, topic, onClose }) {
     setSelectedAnswer(index);
     if (index === filteredQuestions[currentQuestion].correctAnswer) {
       setScore((prev) => prev + 1);
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#FFD700', '#FFA500', '#FF6347'] // Cores dourado, laranja e vermelho-tomate
+      });
     }
   };
 

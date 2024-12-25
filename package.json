@@ -42,6 +42,7 @@
     "@tiptap/starter-kit": "^2.10.3",
     "@uiw/react-color": "^2.3.2",
     "@vimeo/player": "^2.25.0",
+    "canvas-confetti": "^1.9.3",
     "class-variance-authority": "^0.7.0",
     "classnames": "^2.5.1",
     "clsx": "^2.1.0",
