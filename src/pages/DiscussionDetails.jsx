@@ -1,21 +1,25 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import TopNav from '@/components/TopNav';
-import Sidebar from '@/components/courses/Sidebar';
-import { useAuth } from '@/contexts/AuthContext';
-import { formatDistanceToNow } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { getDiscussion, addComment, toggleDiscussionLike } from '@/lib/supabase';
-import { toast } from '@/components/ui/use-toast';
+import React, { useState, useEffect } from "react";
+import { useParams, Link } from "react-router-dom";
+import TopNav from "@/components/TopNav";
+import Sidebar from "@/components/courses/Sidebar";
+import { useAuth } from "@/contexts/AuthContext";
+import { formatDistanceToNow } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  getDiscussion,
+  addComment,
+  toggleDiscussionLike,
+} from "@/lib/supabase";
+import { toast } from "@/components/ui/use-toast";
 
 export default function DiscussionDetails() {
   const { id } = useParams();
   const { currentUser } = useAuth();
   const [discussion, setDiscussion] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [comment, setComment] = useState('');
+  const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -27,11 +31,11 @@ export default function DiscussionDetails() {
       const data = await getDiscussion(id);
       setDiscussion(data);
     } catch (error) {
-      console.error('Erro ao carregar discussão:', error);
+      console.error("Erro ao carregar discussão:", error);
       toast({
-        title: 'Erro ao carregar discussão',
-        description: 'Não foi possível carregar os detalhes da discussão.',
-        variant: 'destructive',
+        title: "Erro ao carregar discussão",
+        description: "Não foi possível carregar os detalhes da discussão.",
+        variant: "destructive",
       });
     } finally {
       setLoading(false);
@@ -45,18 +49,18 @@ export default function DiscussionDetails() {
     setSubmitting(true);
     try {
       await addComment(id, comment, currentUser.id);
-      setComment('');
+      setComment("");
       await fetchDiscussion();
       toast({
-        title: 'Comentário adicionado',
-        description: 'Seu comentário foi publicado com sucesso.',
+        title: "Comentário adicionado",
+        description: "Seu comentário foi publicado com sucesso.",
       });
     } catch (error) {
-      console.error('Erro ao adicionar comentário:', error);
+      console.error("Erro ao adicionar comentário:", error);
       toast({
-        title: 'Erro ao adicionar comentário',
-        description: 'Ocorreu um erro ao publicar seu comentário.',
-        variant: 'destructive',
+        title: "Erro ao adicionar comentário",
+        description: "Ocorreu um erro ao publicar seu comentário.",
+        variant: "destructive",
       });
     } finally {
       setSubmitting(false);
@@ -68,11 +72,11 @@ export default function DiscussionDetails() {
       await toggleDiscussionLike(id, currentUser.id);
       await fetchDiscussion();
     } catch (error) {
-      console.error('Erro ao curtir/descurtir:', error);
+      console.error("Erro ao curtir/descurtir:", error);
       toast({
-        title: 'Erro',
-        description: 'Não foi possível processar sua ação.',
-        variant: 'destructive',
+        title: "Erro",
+        description: "Não foi possível processar sua ação.",
+        variant: "destructive",
       });
     }
   };
@@ -123,7 +127,9 @@ export default function DiscussionDetails() {
               <h1 className="text-2xl font-bold mb-2">{discussion.title}</h1>
               <div className="flex items-center text-sm text-gray-600">
                 <span>
-                  por {discussion.user?.user_metadata?.name || discussion.user?.email}
+                  por{" "}
+                  {discussion.user?.user_metadata?.name ||
+                    discussion.user?.email}
                 </span>
                 <span className="mx-2">•</span>
                 <span>{formatDate(discussion.created_at)}</span>
@@ -135,11 +141,7 @@ export default function DiscussionDetails() {
             </div>
 
             <div className="flex items-center justify-between border-t pt-4">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleLike}
-              >
+              <Button variant="outline" size="sm" onClick={handleLike}>
                 {discussion.likes_count || 0} Curtidas
               </Button>
               <span className="text-sm text-gray-600">
@@ -162,7 +164,7 @@ export default function DiscussionDetails() {
                 required
               />
               <Button type="submit" disabled={submitting}>
-                {submitting ? 'Enviando...' : 'Enviar Comentário'}
+                {submitting ? "Enviando..." : "Enviar Comentário"}
               </Button>
             </form>
 

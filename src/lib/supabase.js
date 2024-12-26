@@ -165,56 +165,43 @@ export const getUserProgress = async (userId) => {
 // Buscar todas as discussões
 export const getDiscussions = async (userId) => {
   try {
-    // Buscar discussões com comentários e likes
+    // Buscar discussões com comentários e perfis dos usuários
     const { data: discussions, error } = await supabase
-      .from("discussions")
+      .from("publicacao_comunidade")
       .select(
         `
         *,
-        comments:discussion_comments(*),
-        discussion_likes(*)
+        comentarios:comentarios_comunidade(
+          id,
+          conteudo,
+          criado_em,
+          usuario_id,
+          curtidas,
+          usuario:usuario_id(*)
+        ),
+        usuario:usuario_id(*)
       `
       )
-      .order("created_at", { ascending: false });
+      .order("criado_em", { ascending: false });
 
     if (error) throw error;
-
-    // Buscar perfis de todos os usuários envolvidos
-    const userIds = [
-      ...new Set([
-        ...discussions.map((d) => d.user_id),
-        ...discussions.flatMap((d) => d.comments.map((c) => c.user_id)),
-      ]),
-    ];
-
-    const { data: perfis } = await supabase
-      .from("perfis")
-      .select("*")
-      .in("id", userIds);
-
-    const perfilPorId = Object.fromEntries(
-      perfis.map((perfil) => [perfil.id, perfil])
-    );
 
     // Processar os dados para incluir informações adicionais
     const processedDiscussions = discussions.map((discussion) => ({
       ...discussion,
       user_metadata: {
-        ...discussion.user_metadata, // Mantém os dados do avatar
-        nome: perfilPorId[discussion.user_id]?.nome || "Usuário", // Adiciona o nome do perfil
+        ...discussion.usuario?.user_metadata,
+        nome: discussion.usuario?.nome || "Usuário",
       },
-      comments: discussion.comments.map((comment) => ({
+      comments: discussion.comentarios.map((comment) => ({
         ...comment,
         user_metadata: {
-          ...comment.user_metadata, // Mantém os dados do avatar
-          nome: perfilPorId[comment.user_id]?.nome || "Usuário", // Adiciona o nome do perfil
+          ...comment.usuario?.user_metadata,
+          nome: comment.usuario?.nome || "Usuário",
         },
       })),
-      user_has_liked: discussion.discussion_likes.some(
-        (like) => like.user_id === userId
-      ),
-      likes_count: discussion.discussion_likes.length,
-      comments_count: discussion.comments.length,
+      likes_count: discussion.curtidas || 0,
+      comments_count: discussion.comentarios_count || 0,
     }));
 
     return processedDiscussions;
@@ -228,24 +215,21 @@ export const getDiscussions = async (userId) => {
 export const getDiscussion = async (id) => {
   try {
     const { data, error } = await supabase
-      .from("discussions")
+      .from("publicacao_comunidade")
       .select(
         `
         *,
-        user:user_id (
+        usuario:usuario_id (
           id,
           email,
           user_metadata
         ),
-        comments:discussion_comments (
+        comentarios:comentarios_comunidade (
           id,
-          content,
-          created_at,
-          user:user_id (
-            id,
-            email,
-            user_metadata
-          )
+          conteudo,
+          criado_em,
+          usuario_id,
+          curtidas
         )
       `
       )
@@ -263,36 +247,13 @@ export const getDiscussion = async (id) => {
 // Criar uma nova discussão
 export const createDiscussion = async (title, content, userId) => {
   try {
-    // Primeiro busca os dados do usuário
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-    if (userError) throw userError;
-
-    // Busca o perfil do usuário
-    const { data: perfil, error: perfilError } = await supabase
-      .from("perfis")
-      .select("nome")
-      .eq("id", userId)
-      .single();
-
-    if (perfilError) throw perfilError;
-
     const { data, error } = await supabase
-      .from("discussions")
+      .from("publicacao_comunidade")
       .insert([
         {
-          title,
-          content,
-          user_id: userId,
-          user_metadata: {
-            ...user.user_metadata,
-            avatar_style: user.user_metadata.avatar_style,
-            avatar_seed: user.user_metadata.avatar_seed,
-            avatar_url: user.user_metadata.avatar_url,
-            nome: perfil.nome,
-          },
+          titulo: title,
+          conteudo: content,
+          usuario_id: userId,
         },
       ])
       .select()
@@ -309,61 +270,32 @@ export const createDiscussion = async (title, content, userId) => {
 // Adicionar comentário em uma discussão
 export const addComment = async (discussionId, content, userId) => {
   try {
-    // Primeiro busca os dados do usuário
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-    if (userError) throw userError;
-
-    // Busca o perfil do usuário
-    const { data: perfil, error: perfilError } = await supabase
-      .from("perfis")
-      .select("nome")
-      .eq("id", userId)
-      .single();
-
-    if (perfilError) throw perfilError;
-
     // Insere o comentário
     const { data, error } = await supabase
-      .from("discussion_comments")
+      .from("comentarios_comunidade")
       .insert([
         {
-          discussion_id: discussionId,
-          content,
-          user_id: userId,
-          user_metadata: {
-            ...user.user_metadata,
-            avatar_style: user.user_metadata.avatar_style,
-            avatar_seed: user.user_metadata.avatar_seed,
-            avatar_url: user.user_metadata.avatar_url,
-            nome: perfil.nome,
-          },
+          publicacao_id: discussionId,
+          conteudo: content,
+          usuario_id: userId,
         },
       ])
-      .select("*, discussion:discussion_id(*)")
+      .select()
       .single();
 
     if (error) throw error;
 
-    // Atualiza o contador de comentários na discussão
-    const { error: updateError } = await supabase.rpc(
-      "increment_comments_count",
-      {
-        discussion_id: discussionId,
-      }
-    );
+    // Atualiza o contador de comentários na publicação
+    const { error: updateError } = await supabase
+      .from("publicacao_comunidade")
+      .update({
+        comentarios_count: supabase.raw("comentarios_count + 1"),
+      })
+      .eq("id", discussionId);
 
     if (updateError) throw updateError;
 
-    return {
-      ...data,
-      user_metadata: {
-        ...user.user_metadata,
-        nome: perfil.nome,
-      },
-    };
+    return data;
   } catch (error) {
     console.error("Erro ao adicionar comentário:", error);
     throw error;
@@ -373,10 +305,18 @@ export const addComment = async (discussionId, content, userId) => {
 // Curtir/descurtir uma discussão
 export const toggleDiscussionLike = async (discussionId, userId) => {
   try {
-    const { error } = await supabase.rpc("toggle_discussion_like", {
-      p_discussion_id: discussionId,
-      p_user_id: userId,
-    });
+    const { data: publicacao } = await supabase
+      .from("publicacao_comunidade")
+      .select("curtidas")
+      .eq("id", discussionId)
+      .single();
+
+    const { error } = await supabase
+      .from("publicacao_comunidade")
+      .update({
+        curtidas: (publicacao.curtidas || 0) + 1,
+      })
+      .eq("id", discussionId);
 
     if (error) throw error;
   } catch (error) {
@@ -388,20 +328,20 @@ export const toggleDiscussionLike = async (discussionId, userId) => {
 // Deletar uma discussão
 export const deleteDiscussion = async (discussionId, userId) => {
   try {
-    // Primeiro verifica se o usuário é dono da discussão
-    const { data: discussion } = await supabase
-      .from("discussions")
-      .select("user_id")
+    // Primeiro verifica se o usuário é dono da publicação
+    const { data: publicacao } = await supabase
+      .from("publicacao_comunidade")
+      .select("usuario_id")
       .eq("id", discussionId)
       .single();
 
-    if (!discussion || discussion.user_id !== userId) {
+    if (!publicacao || publicacao.usuario_id !== userId) {
       throw new Error("Você não tem permissão para excluir esta publicação");
     }
 
-    // Deleta a discussão
+    // Deleta a publicação
     const { error } = await supabase
-      .from("discussions")
+      .from("publicacao_comunidade")
       .delete()
       .eq("id", discussionId);
 

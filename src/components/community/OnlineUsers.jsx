@@ -82,7 +82,10 @@ function OnlineUsers() {
             onlineUsers
               .filter((user) => user.id !== currentUser?.id)
               .map((user) => (
-                <div key={user.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-accent/50 transition-colors">
+                <div
+                  key={user.id}
+                  className="flex items-center gap-3 p-2 rounded-lg hover:bg-accent/50 transition-colors"
+                >
                   <div className="relative">
                     <Avatar className="h-8 w-8">
                       <AvatarImage

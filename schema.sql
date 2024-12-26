@@ -497,6 +497,7 @@ CREATE TABLE IF NOT EXISTS "public"."perfis" (
     "ultimo_login" timestamp with time zone,
     "criado_em" timestamp with time zone DEFAULT "now"(),
     "atualizado_em" timestamp with time zone DEFAULT "now"()
+    "user_metadata" "jsonb"
 );
 
 

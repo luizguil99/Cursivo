@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { ThumbsUp, MessageCircle, Share2, Trash2 } from "lucide-react";
@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { supabase } from "@/lib/supabase";
 
 export default function DiscussionCard({
   discussion,
@@ -30,15 +31,54 @@ export default function DiscussionCard({
   onSubmitComment,
 }) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [discussionUser, setDiscussionUser] = useState(null);
+
+  useEffect(() => {
+    const loadDiscussionUser = async () => {
+      if (discussion.usuario_id !== currentUser?.id) {
+        try {
+          const { data: perfil } = await supabase
+            .from("perfis")
+            .select("*, user_metadata")
+            .eq("id", discussion.usuario_id)
+            .single();
+
+          if (perfil) {
+            setDiscussionUser(perfil);
+          }
+        } catch (error) {
+          console.error("Erro ao carregar usuário da discussão:", error);
+        }
+      }
+    };
+
+    loadDiscussionUser();
+  }, [discussion.usuario_id, currentUser?.id]);
 
   const formatDate = (date) => {
-    return formatDistanceToNow(new Date(date), {
-      addSuffix: true,
-      locale: ptBR,
-    });
+    if (!date) {
+      console.warn("Data inválida:", date);
+      return "Data inválida";
+    }
+
+    try {
+      const parsedDate = new Date(date);
+      if (isNaN(parsedDate.getTime())) {
+        console.warn("Data inválida após parse:", date);
+        return "Data inválida";
+      }
+
+      return formatDistanceToNow(parsedDate, {
+        addSuffix: true,
+        locale: ptBR,
+      });
+    } catch (error) {
+      console.error("Erro ao formatar data:", error);
+      return "Data inválida";
+    }
   };
 
-  const isOwner = discussion.user_id === currentUser?.id;
+  const isOwner = discussion.usuario_id === currentUser?.id;
 
   const handleDelete = () => {
     onDelete(discussion.id);
@@ -52,8 +92,19 @@ export default function DiscussionCard({
           <Avatar className="h-10 w-10 ring-2 ring-white">
             <AvatarImage
               src={
-                discussion?.user_metadata?.avatar_url ||
-                getAvatarUrl(discussion)
+                discussion.usuario_id === currentUser?.id
+                  ? currentUser?.user_metadata?.avatar_url ||
+                    getAvatarUrl(
+                      currentUser,
+                      currentUser?.user_metadata?.avatar_style,
+                      currentUser?.user_metadata?.avatar_seed
+                    )
+                  : discussionUser?.user_metadata?.avatar_url ||
+                    getAvatarUrl(
+                      discussionUser,
+                      discussionUser?.user_metadata?.avatar_style,
+                      discussionUser?.user_metadata?.avatar_seed
+                    )
               }
               alt={getDisplayName(discussion)}
             />
@@ -65,10 +116,12 @@ export default function DiscussionCard({
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <p className="text-sm font-medium text-foreground">
-                  {discussion.user_metadata?.nome || "Usuário"}
+                  {discussionUser?.nome ||
+                    discussion.user_metadata?.nome ||
+                    "Usuário"}
                 </p>
                 <span className="text-sm text-muted-foreground">
-                  {formatDate(discussion.created_at)}
+                  {formatDate(discussion.criado_em)}
                 </span>
               </div>
               {isOwner && (
@@ -113,7 +166,7 @@ export default function DiscussionCard({
             <div
               className="mt-1 text-sm text-foreground break-words"
               dangerouslySetInnerHTML={{
-                __html: discussion.content,
+                __html: discussion.conteudo,
               }}
             />
             <div className="mt-4 flex items-center space-x-4">
@@ -121,14 +174,14 @@ export default function DiscussionCard({
                 onClick={() => onLike(discussion.id)}
                 disabled={isLiking}
                 className={`flex items-center space-x-1 ${
-                  discussion.user_has_liked
+                  discussion.curtidas
                     ? "text-blue-600"
                     : "text-gray-500 hover:text-blue-600"
                 }`}
               >
                 <ThumbsUp className="h-4 w-4" />
                 <span className="text-xs">
-                  {discussion.likes_count || 0} Curtir
+                  {discussion.curtidas || 0} Curtir
                 </span>
               </button>
               <button
@@ -137,7 +190,7 @@ export default function DiscussionCard({
               >
                 <MessageCircle className="h-4 w-4" />
                 <span className="text-xs">
-                  {discussion.comments_count || 0} Comentar
+                  {discussion.comentarios_count || 0} Comentar
                 </span>
               </button>
               <button className="flex items-center space-x-1 text-gray-500 hover:text-blue-600">
@@ -168,15 +221,22 @@ export default function DiscussionCard({
             )}
 
             {/* Lista de comentários */}
-            {discussion.comments && discussion.comments.length > 0 && (
+            {discussion.comentarios && discussion.comentarios.length > 0 && (
               <div className="mt-4 space-y-4">
-                {discussion.comments.map((comment) => (
+                {discussion.comentarios.map((comment) => (
                   <div key={comment.id} className="flex space-x-3">
-                    <Avatar className="h-8 w-8">
+                    <Avatar className="h-8 w-8 ring-1 ring-white">
                       <AvatarImage
                         src={
-                          comment?.user_metadata?.avatar_url ||
-                          getAvatarUrl(comment)
+                          comment.usuario_id === currentUser?.id
+                            ? currentUser?.user_metadata?.avatar_url ||
+                              getAvatarUrl(
+                                currentUser,
+                                currentUser?.user_metadata?.avatar_style,
+                                currentUser?.user_metadata?.avatar_seed
+                              )
+                            : comment?.user_metadata?.avatar_url ||
+                              getAvatarUrl(comment)
                         }
                         alt={getDisplayName(comment)}
                       />
@@ -190,13 +250,13 @@ export default function DiscussionCard({
                           {comment.user_metadata?.nome || "Usuário"}
                         </p>
                         <span className="text-xs text-gray-500">
-                          {formatDate(comment.created_at)}
+                          {formatDate(comment.criado_em)}
                         </span>
                       </div>
                       <div
                         className="text-sm text-gray-700"
                         dangerouslySetInnerHTML={{
-                          __html: comment.content,
+                          __html: comment.conteudo,
                         }}
                       />
                     </div>

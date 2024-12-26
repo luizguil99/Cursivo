@@ -99,6 +99,7 @@ export default function Community() {
   const [isUploading, setIsUploading] = useState(false);
   const [userName, setUserName] = useState("Usuário");
 
+  // useEffect para buscar o nome do usuário
   useEffect(() => {
     const fetchUserName = async () => {
       if (currentUser) {
@@ -108,7 +109,7 @@ export default function Community() {
           .eq("id", currentUser.id)
           .single();
 
-        if (!error && perfil) {
+        if (!error && perfil?.nome) {
           setUserName(perfil.nome);
         }
       }
@@ -119,66 +120,101 @@ export default function Community() {
 
   const handleAvatarChange = async (style, seed) => {
     try {
-      setSelectedStyle(style);
-      setSelectedSeed(seed);
+      if (!currentUser) {
+        toast({
+          title: "Erro",
+          description: "Você precisa estar logado para alterar seu avatar.",
+          variant: "destructive",
+        });
+        return;
+      }
 
-      const { avatarUrl } = await updateUserAvatar(currentUser.id, style, seed);
+      // Buscar metadados atuais do perfil
+      const { data: perfilAtual, error: perfilError } = await supabase
+        .from("perfis")
+        .select("user_metadata")
+        .eq("id", currentUser.id)
+        .single();
 
-      // Atualiza o currentUser localmente
-      currentUser.user_metadata = {
-        ...currentUser.user_metadata,
-        avatar_style: style,
+      if (perfilError) {
+        console.error("Erro ao buscar perfil atual:", perfilError);
+        throw perfilError;
+      }
+
+      // Manter a estrutura atual e atualizar apenas os campos necessários
+      const updatedMetadata = {
+        ...perfilAtual.user_metadata,
+        avatar_url: `https://api.dicebear.com/7.x/${style}/svg?seed=${seed}`,
         avatar_seed: seed,
-        avatar_url: avatarUrl,
+        avatar_style: style,
       };
 
-      // Atualiza as discussões na interface
-      setDiscussions(
-        discussions.map((discussion) => {
-          if (discussion.user_id === currentUser.id) {
-            return {
-              ...discussion,
-              user_metadata: {
-                ...discussion.user_metadata,
-                avatar_style: style,
-                avatar_seed: seed,
-                avatar_url: avatarUrl,
-              },
-            };
-          }
-          // Atualiza os comentários dentro da discussão
-          if (discussion.comments) {
-            discussion.comments = discussion.comments.map((comment) => {
-              if (comment.user_id === currentUser.id) {
-                return {
-                  ...comment,
-                  user_metadata: {
-                    ...comment.user_metadata,
-                    avatar_style: style,
-                    avatar_seed: seed,
-                    avatar_url: avatarUrl,
-                  },
-                };
-              }
-              return comment;
-            });
-          }
-          return discussion;
-        })
-      );
+      console.log("Metadados atualizados:", updatedMetadata);
 
+      // Atualizar o user_metadata no Auth
+      const { error: userError } = await supabase.auth.updateUser({
+        data: updatedMetadata,
+      });
+
+      if (userError) {
+        console.error("Erro ao atualizar avatar no auth:", userError);
+        throw userError;
+      }
+
+      // Atualizar o user_metadata na tabela perfis
+      const { error: updateError } = await supabase
+        .from("perfis")
+        .update({
+          user_metadata: updatedMetadata,
+        })
+        .eq("id", currentUser.id);
+
+      if (updateError) {
+        console.error("Erro ao atualizar avatar no perfil:", updateError);
+        throw updateError;
+      }
+
+      console.log("Avatar atualizado com sucesso no auth e no perfil");
+
+      // Buscar todas as discussões atualizadas com seus comentários
+      const { data: allDiscussions, error: fetchError } = await supabase
+        .from("publicacao_comunidade")
+        .select(
+          `
+          *,
+          usuario:usuario_id(*),
+          comentarios:comentarios_comunidade(
+            id,
+            conteudo,
+            criado_em,
+            usuario_id,
+            curtidas,
+            usuario:usuario_id(*)
+          )
+        `
+        )
+        .order("criado_em", { ascending: false });
+
+      if (fetchError) {
+        console.error("Erro ao buscar discussões atualizadas:", fetchError);
+        throw fetchError;
+      }
+
+      // Atualizar o estado com todas as discussões atualizadas
+      setDiscussions(allDiscussions);
+      setSelectedStyle(style);
+      setSelectedSeed(seed);
       setDialogOpen(false);
+
       toast({
         description: "Avatar atualizado com sucesso!",
       });
-
-      // Atualiza a lista de discussões
-      refreshDiscussions(currentUser.id);
     } catch (error) {
-      console.error("Erro ao atualizar avatar:", error);
+      console.error("Erro detalhado ao atualizar avatar:", error);
       toast({
+        title: "Erro",
+        description: "Não foi possível atualizar seu avatar.",
         variant: "destructive",
-        description: "Erro ao atualizar avatar.",
       });
     }
   };
@@ -188,8 +224,14 @@ export default function Community() {
       const file = event.target.files[0];
       if (!file) return;
 
+      console.log("Iniciando upload de imagem:", {
+        fileName: file.name,
+        fileSize: file.size,
+      });
+
       // Verificar tipo de arquivo
       if (!file.type.startsWith("image/")) {
+        console.log("Tipo de arquivo inválido:", file.type);
         toast({
           variant: "destructive",
           description: "Por favor, selecione uma imagem válida.",
@@ -199,6 +241,7 @@ export default function Community() {
 
       // Verificar tamanho (max 5MB)
       if (file.size > 5 * 1024 * 1024) {
+        console.log("Arquivo muito grande:", file.size);
         toast({
           variant: "destructive",
           description: "A imagem deve ter no máximo 5MB.",
@@ -215,20 +258,23 @@ export default function Community() {
 
       // Fazer upload
       const imageUrl = await uploadImage(file);
+      console.log("Imagem enviada com sucesso:", imageUrl);
 
-      // Atualizar avatar
-      const { data, error: userError } = await supabase.auth.updateUser({
-        data: {
-          avatar_style: "custom",
-          avatar_url: imageUrl,
-        },
-      });
+      // Atualizar avatar no auth
+      const { data: authData, error: userError } =
+        await supabase.auth.updateUser({
+          data: {
+            avatar_style: "custom",
+            avatar_url: imageUrl,
+          },
+        });
 
       if (userError) throw userError;
+      console.log("Auth atualizado com sucesso:", authData);
 
-      // Atualizar discussões e comentários
-      const { error: discussionsError } = await supabase
-        .from("discussions")
+      // Atualizar na tabela de perfis
+      const { error: profileError } = await supabase
+        .from("perfis")
         .update({
           user_metadata: {
             ...currentUser.user_metadata,
@@ -236,30 +282,22 @@ export default function Community() {
             avatar_url: imageUrl,
           },
         })
-        .eq("user_id", currentUser.id);
+        .eq("id", currentUser.id);
 
-      if (discussionsError) throw discussionsError;
-
-      const { error: commentsError } = await supabase
-        .from("comments")
-        .update({
-          user_metadata: {
-            ...currentUser.user_metadata,
-            avatar_style: "custom",
-            avatar_url: imageUrl,
-          },
-        })
-        .eq("user_id", currentUser.id);
-
-      if (commentsError) throw commentsError;
+      if (profileError) throw profileError;
+      console.log("Perfil atualizado com sucesso");
 
       // Atualizar estado local
-      if (data.user) {
+      if (authData.user) {
         currentUser.user_metadata = {
           ...currentUser.user_metadata,
           avatar_style: "custom",
           avatar_url: imageUrl,
         };
+
+        // Força atualização do estado para re-renderizar o componente
+        const updatedUser = { ...currentUser };
+        // setCurrentUser(updatedUser);
       }
 
       // Atualizar interface
@@ -295,16 +333,18 @@ export default function Community() {
       );
 
       setDialogOpen(false);
+      console.log("Interface atualizada com sucesso");
       toast({
         description: "Avatar atualizado com sucesso!",
       });
 
-      refreshDiscussions(currentUser.id);
+      await refreshDiscussions(currentUser.id);
+      console.log("Discussões atualizadas com sucesso");
     } catch (error) {
-      console.error("Erro ao fazer upload do avatar:", error);
+      console.error("Erro detalhado ao fazer upload do avatar:", error);
       toast({
         variant: "destructive",
-        description: "Erro ao atualizar avatar.",
+        description: `Erro ao atualizar avatar: ${error.message}`,
       });
     } finally {
       setIsUploading(false);
@@ -519,7 +559,10 @@ export default function Community() {
           {/* Quick Post Form */}
           <div className="bg-card rounded-xl shadow-sm border border-yellow-500 p-6 mb-8">
             <div className="flex items-center space-x-4 mb-4">
-              <Avatar>
+              <Avatar
+                className="cursor-pointer"
+                onClick={() => setDialogOpen(true)}
+              >
                 <AvatarImage
                   src={
                     currentUser?.user_metadata?.avatar_url ||
@@ -536,9 +579,7 @@ export default function Community() {
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1">
-                <h3 className="font-medium text-foreground">
-                  {userName}
-                </h3>
+                <h3 className="font-medium text-foreground">{userName}</h3>
                 <p className="text-sm text-muted-foreground">
                   Compartilhe seus pensamentos com a comunidade
                 </p>
@@ -567,6 +608,42 @@ export default function Community() {
               </Button>
             </div>
           </div>
+
+          {/* Diálogo de Seleção de Avatar */}
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle>Escolha seu Avatar</DialogTitle>
+              </DialogHeader>
+              <div className="grid grid-cols-2 gap-4 py-4">
+                {AVATAR_STYLES.map((style) => (
+                  <div key={style.value} className="space-y-2">
+                    <h3 className="text-sm font-medium">{style.label}</h3>
+                    <div className="grid grid-cols-4 gap-2">
+                      {style.seeds.map((seed) => (
+                        <Avatar
+                          key={seed}
+                          className={`cursor-pointer transition-all hover:scale-110 ${
+                            selectedStyle === style.value &&
+                            selectedSeed === seed
+                              ? "ring-2 ring-yellow-500"
+                              : ""
+                          }`}
+                          onClick={() => handleAvatarChange(style.value, seed)}
+                        >
+                          <AvatarImage
+                            src={getAvatarUrl(currentUser, style.value, seed)}
+                            alt={`${style.label} - ${seed}`}
+                          />
+                          <AvatarFallback>{getInitials(seed)}</AvatarFallback>
+                        </Avatar>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </DialogContent>
+          </Dialog>
 
           {/* Discussions List */}
           <ScrollArea
