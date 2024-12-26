@@ -39,12 +39,20 @@ export default function DiscussionCard({
         try {
           const { data: perfil } = await supabase
             .from("perfis")
-            .select("*, user_metadata")
+            .select("nome, user_metadata")
             .eq("id", discussion.usuario_id)
             .single();
 
           if (perfil) {
-            setDiscussionUser(perfil);
+            setDiscussionUser({
+              ...perfil,
+              user_metadata: {
+                ...perfil.user_metadata,
+                avatar_url: perfil.user_metadata?.avatar_url,
+                avatar_style: perfil.user_metadata?.avatar_style,
+                avatar_seed: perfil.user_metadata?.avatar_seed,
+              }
+            });
           }
         } catch (error) {
           console.error("Erro ao carregar usuário da discussão:", error);
@@ -93,18 +101,8 @@ export default function DiscussionCard({
             <AvatarImage
               src={
                 discussion.usuario_id === currentUser?.id
-                  ? currentUser?.user_metadata?.avatar_url ||
-                    getAvatarUrl(
-                      currentUser,
-                      currentUser?.user_metadata?.avatar_style,
-                      currentUser?.user_metadata?.avatar_seed
-                    )
-                  : discussionUser?.user_metadata?.avatar_url ||
-                    getAvatarUrl(
-                      discussionUser,
-                      discussionUser?.user_metadata?.avatar_style,
-                      discussionUser?.user_metadata?.avatar_seed
-                    )
+                  ? currentUser?.user_metadata?.avatar_url
+                  : discussionUser?.user_metadata?.avatar_url
               }
               alt={getDisplayName(discussion)}
             />
@@ -116,9 +114,9 @@ export default function DiscussionCard({
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <p className="text-sm font-medium text-foreground">
-                  {discussionUser?.nome ||
-                    discussion.user_metadata?.nome ||
-                    "Usuário"}
+                  {discussion.usuario_id === currentUser?.id
+                    ? currentUser?.user_metadata?.nome || "Admin"
+                    : discussionUser?.nome || "Admin"}
                 </p>
                 <span className="text-sm text-muted-foreground">
                   {formatDate(discussion.criado_em)}
@@ -229,14 +227,8 @@ export default function DiscussionCard({
                       <AvatarImage
                         src={
                           comment.usuario_id === currentUser?.id
-                            ? currentUser?.user_metadata?.avatar_url ||
-                              getAvatarUrl(
-                                currentUser,
-                                currentUser?.user_metadata?.avatar_style,
-                                currentUser?.user_metadata?.avatar_seed
-                              )
-                            : comment?.user_metadata?.avatar_url ||
-                              getAvatarUrl(comment)
+                            ? currentUser?.user_metadata?.avatar_url
+                            : comment.usuario?.user_metadata?.avatar_url
                         }
                         alt={getDisplayName(comment)}
                       />
@@ -247,7 +239,9 @@ export default function DiscussionCard({
                     <div className="flex-1">
                       <div className="flex items-center space-x-2">
                         <p className="text-sm font-medium">
-                          {comment.user_metadata?.nome || "Usuário"}
+                          {comment.usuario_id === currentUser?.id
+                            ? currentUser?.user_metadata?.nome || "Admin"
+                            : comment.usuario?.nome || "Admin"}
                         </p>
                         <span className="text-xs text-gray-500">
                           {formatDate(comment.criado_em)}

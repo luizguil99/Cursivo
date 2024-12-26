@@ -97,26 +97,7 @@ export default function Community() {
     currentUser?.user_metadata?.avatar_seed || null
   );
   const [isUploading, setIsUploading] = useState(false);
-  const [userName, setUserName] = useState("Usuário");
-
-  // useEffect para buscar o nome do usuário
-  useEffect(() => {
-    const fetchUserName = async () => {
-      if (currentUser) {
-        const { data: perfil, error } = await supabase
-          .from("perfis")
-          .select("nome")
-          .eq("id", currentUser.id)
-          .single();
-
-        if (!error && perfil?.nome) {
-          setUserName(perfil.nome);
-        }
-      }
-    };
-
-    fetchUserName();
-  }, [currentUser]);
+  const [userName, setUserName] = useState(currentUser?.user_metadata?.nome || "Usuário");
 
   const handleAvatarChange = async (style, seed) => {
     try {
@@ -141,55 +122,64 @@ export default function Community() {
         throw perfilError;
       }
 
+      // Gerar URL do avatar
+      const avatarUrl = `https://api.dicebear.com/7.x/${style}/svg?seed=${seed}`;
+
       // Manter a estrutura atual e atualizar apenas os campos necessários
       const updatedMetadata = {
         ...perfilAtual.user_metadata,
-        avatar_url: `https://api.dicebear.com/7.x/${style}/svg?seed=${seed}`,
+        avatar_url: avatarUrl,
         avatar_seed: seed,
         avatar_style: style,
       };
 
       console.log("Metadados atualizados:", updatedMetadata);
 
-      // Atualizar o user_metadata no Auth
-      const { error: userError } = await supabase.auth.updateUser({
-        data: updatedMetadata,
-      });
+      // Atualizar o user_metadata no Auth e na tabela perfis em paralelo
+      const [authResult, perfilUpdateResult] = await Promise.all([
+        supabase.auth.updateUser({
+          data: updatedMetadata,
+        }),
+        supabase
+          .from("perfis")
+          .update({
+            user_metadata: updatedMetadata,
+          })
+          .eq("id", currentUser.id)
+      ]);
 
-      if (userError) {
-        console.error("Erro ao atualizar avatar no auth:", userError);
-        throw userError;
+      if (authResult.error) {
+        console.error("Erro ao atualizar avatar no auth:", authResult.error);
+        throw authResult.error;
       }
 
-      // Atualizar o user_metadata na tabela perfis
-      const { error: updateError } = await supabase
-        .from("perfis")
-        .update({
-          user_metadata: updatedMetadata,
-        })
-        .eq("id", currentUser.id);
-
-      if (updateError) {
-        console.error("Erro ao atualizar avatar no perfil:", updateError);
-        throw updateError;
+      if (perfilUpdateResult.error) {
+        console.error("Erro ao atualizar avatar no perfil:", perfilUpdateResult.error);
+        throw perfilUpdateResult.error;
       }
 
-      console.log("Avatar atualizado com sucesso no auth e no perfil");
-
-      // Buscar todas as discussões atualizadas com seus comentários
+      // Atualizar as discussões para refletir o novo avatar
       const { data: allDiscussions, error: fetchError } = await supabase
         .from("publicacao_comunidade")
         .select(
           `
           *,
-          usuario:usuario_id(*),
+          usuario:usuario_id(
+            id,
+            nome,
+            user_metadata
+          ),
           comentarios:comentarios_comunidade(
             id,
             conteudo,
             criado_em,
             usuario_id,
             curtidas,
-            usuario:usuario_id(*)
+            usuario:usuario_id(
+              id,
+              nome,
+              user_metadata
+            )
           )
         `
         )
@@ -409,17 +399,23 @@ export default function Community() {
   const submitComment = async (discussionId) => {
     if (!commentText.trim()) return;
 
+    setIsCommenting(true);
+
     // Encontra a discussão atual
     const discussion = discussions.find((d) => d.id === discussionId);
     if (!discussion) return;
 
-    // Cria um comentário temporário
+    // Cria um comentário temporário com os dados corretos do usuário
     const tempComment = {
       id: "temp-" + Date.now(),
-      content: commentText,
-      created_at: new Date().toISOString(),
-      user_id: currentUser.id,
-      user_metadata: currentUser.user_metadata,
+      conteudo: commentText,
+      criado_em: new Date().toISOString(),
+      usuario_id: currentUser.id,
+      usuario: {
+        id: currentUser.id,
+        nome: currentUser.user_metadata?.nome || "Admin",
+        user_metadata: currentUser.user_metadata,
+      },
     };
 
     // Atualiza o estado localmente primeiro (otimista)
@@ -427,8 +423,8 @@ export default function Community() {
       if (d.id === discussionId) {
         return {
           ...d,
-          comments: [...(d.comments || []), tempComment],
-          comments_count: (d.comments_count || 0) + 1,
+          comentarios: [...(d.comentarios || []), tempComment],
+          comentarios_count: (d.comentarios_count || 0) + 1,
         };
       }
       return d;
@@ -444,7 +440,22 @@ export default function Community() {
 
     try {
       // Faz a requisição ao servidor em background
-      await addComment(discussionId, commentText, currentUser.id);
+      const newComment = await addComment(discussionId, commentText, currentUser.id);
+      
+      // Atualiza o comentário com os dados reais do servidor
+      const finalDiscussions = discussions.map((d) => {
+        if (d.id === discussionId) {
+          return {
+            ...d,
+            comentarios: d.comentarios.map((c) => 
+              c.id === tempComment.id ? newComment : c
+            ),
+          };
+        }
+        return d;
+      });
+      
+      setDiscussions(finalDiscussions);
     } catch (error) {
       console.error("Erro ao adicionar comentário:", error);
       // Reverte a atualização otimista em caso de erro

@@ -171,35 +171,32 @@ export const getDiscussions = async (userId) => {
       .select(
         `
         *,
-        comentarios:comentarios_comunidade(
+        usuario:usuario_id (
+          id,
+          nome,
+          user_metadata
+        ),
+        comentarios:comentarios_comunidade (
           id,
           conteudo,
           criado_em,
           usuario_id,
           curtidas,
-          usuario:usuario_id(*)
-        ),
-        usuario:usuario_id(*)
+          usuario:usuario_id (
+            id,
+            nome,
+            user_metadata
+          )
+        )
       `
       )
       .order("criado_em", { ascending: false });
 
     if (error) throw error;
 
-    // Processar os dados para incluir informações adicionais
+    // Processa as discussões para adicionar informações de curtidas
     const processedDiscussions = discussions.map((discussion) => ({
       ...discussion,
-      user_metadata: {
-        ...discussion.usuario?.user_metadata,
-        nome: discussion.usuario?.nome || "Usuário",
-      },
-      comments: discussion.comentarios.map((comment) => ({
-        ...comment,
-        user_metadata: {
-          ...comment.usuario?.user_metadata,
-          nome: comment.usuario?.nome || "Usuário",
-        },
-      })),
       likes_count: discussion.curtidas || 0,
       comments_count: discussion.comentarios_count || 0,
     }));
@@ -221,7 +218,7 @@ export const getDiscussion = async (id) => {
         *,
         usuario:usuario_id (
           id,
-          email,
+          nome,
           user_metadata
         ),
         comentarios:comentarios_comunidade (
@@ -229,7 +226,12 @@ export const getDiscussion = async (id) => {
           conteudo,
           criado_em,
           usuario_id,
-          curtidas
+          curtidas,
+          usuario:usuario_id (
+            id,
+            nome,
+            user_metadata
+          )
         )
       `
       )
@@ -270,6 +272,15 @@ export const createDiscussion = async (title, content, userId) => {
 // Adicionar comentário em uma discussão
 export const addComment = async (discussionId, content, userId) => {
   try {
+    // Primeiro, busca os metadados do usuário
+    const { data: userProfile, error: userError } = await supabase
+      .from("perfis")
+      .select("nome, user_metadata")
+      .eq("id", userId)
+      .single();
+
+    if (userError) throw userError;
+
     // Insere o comentário
     const { data, error } = await supabase
       .from("comentarios_comunidade")
@@ -280,22 +291,44 @@ export const addComment = async (discussionId, content, userId) => {
           usuario_id: userId,
         },
       ])
-      .select()
+      .select(`
+        *,
+        usuario:usuario_id (
+          id,
+          nome,
+          user_metadata
+        )
+      `)
       .single();
 
     if (error) throw error;
+
+    // Busca o contador atual
+    const { data: currentCount } = await supabase
+      .from("publicacao_comunidade")
+      .select("comentarios_count")
+      .eq("id", discussionId)
+      .single();
 
     // Atualiza o contador de comentários na publicação
     const { error: updateError } = await supabase
       .from("publicacao_comunidade")
       .update({
-        comentarios_count: supabase.raw("comentarios_count + 1"),
+        comentarios_count: (currentCount?.comentarios_count || 0) + 1,
       })
       .eq("id", discussionId);
 
     if (updateError) throw updateError;
 
-    return data;
+    // Retorna o comentário com os dados do usuário
+    return {
+      ...data,
+      usuario: {
+        id: userId,
+        nome: userProfile.nome,
+        user_metadata: userProfile.user_metadata,
+      },
+    };
   } catch (error) {
     console.error("Erro ao adicionar comentário:", error);
     throw error;
