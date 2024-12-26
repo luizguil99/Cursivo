@@ -12,7 +12,9 @@ import { Button } from "@/components/ui/button";
 import {
   createDiscussion,
   supabase,
+  getDiscussions,
   toggleDiscussionLike,
+  checkUserLike,
   addComment,
   deleteDiscussion,
 } from "@/lib/supabase";
@@ -76,19 +78,14 @@ const AVATAR_STYLES = [
 export default function Community() {
   const { currentUser } = useAuth();
   const { loading: accessLoading, hasAccess } = useAccess();
-  const {
-    discussions,
-    loading: discussionsLoading,
-    refreshDiscussions,
-    setDiscussions,
-  } = useCommunity();
+  const [discussions, setDiscussions] = useState([]);
+  const [isLiking, setIsLiking] = useState(false);
   const [quickPost, setQuickPost] = useState("");
   const [posting, setPosting] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [activeDiscussion, setActiveDiscussion] = useState(null);
   const [isCommenting, setIsCommenting] = useState(false);
-  const [isLiking, setIsLiking] = useState(false);
   const [visiblePosts, setVisiblePosts] = useState(5);
   const [selectedStyle, setSelectedStyle] = useState(
     currentUser?.user_metadata?.avatar_style || AVATAR_STYLES[0].value
@@ -97,7 +94,44 @@ export default function Community() {
     currentUser?.user_metadata?.avatar_seed || null
   );
   const [isUploading, setIsUploading] = useState(false);
-  const [userName, setUserName] = useState(currentUser?.user_metadata?.nome || "Usuário");
+  const [userName, setUserName] = useState(
+    currentUser?.user_metadata?.nome || "Usuário"
+  );
+
+  // Função para carregar as discussões
+  const loadDiscussions = async () => {
+    try {
+      const discussionsData = await getDiscussions();
+
+      if (currentUser) {
+        // Para cada discussão, verifica se o usuário atual curtiu
+        const discussionsWithLikes = await Promise.all(
+          discussionsData.map(async (discussion) => {
+            const isLiked = await checkUserLike(discussion.id, currentUser.id);
+            return {
+              ...discussion,
+              isLiked,
+            };
+          })
+        );
+        setDiscussions(discussionsWithLikes);
+      } else {
+        setDiscussions(discussionsData);
+      }
+    } catch (error) {
+      console.error("Erro ao carregar discussões:", error);
+      toast({
+        variant: "destructive",
+        description: "Erro ao carregar as discussões.",
+      });
+      setDiscussions([]);
+    }
+  };
+
+  // Carregar discussões quando o componente montar ou quando o usuário mudar
+  useEffect(() => {
+    loadDiscussions();
+  }, [currentUser]);
 
   const handleAvatarChange = async (style, seed) => {
     try {
@@ -110,42 +144,28 @@ export default function Community() {
         return;
       }
 
-      // Buscar metadados atuais do perfil
-      const { data: perfilAtual, error: perfilError } = await supabase
-        .from("perfis")
-        .select("user_metadata")
-        .eq("id", currentUser.id)
-        .single();
-
-      if (perfilError) {
-        console.error("Erro ao buscar perfil atual:", perfilError);
-        throw perfilError;
-      }
-
       // Gerar URL do avatar
       const avatarUrl = `https://api.dicebear.com/7.x/${style}/svg?seed=${seed}`;
-
-      // Manter a estrutura atual e atualizar apenas os campos necessários
-      const updatedMetadata = {
-        ...perfilAtual.user_metadata,
-        avatar_url: avatarUrl,
-        avatar_seed: seed,
-        avatar_style: style,
-      };
-
-      console.log("Metadados atualizados:", updatedMetadata);
 
       // Atualizar o user_metadata no Auth e na tabela perfis em paralelo
       const [authResult, perfilUpdateResult] = await Promise.all([
         supabase.auth.updateUser({
-          data: updatedMetadata,
+          data: {
+            avatar_url: avatarUrl,
+            avatar_seed: seed,
+            avatar_style: style,
+          },
         }),
         supabase
           .from("perfis")
           .update({
-            user_metadata: updatedMetadata,
+            user_metadata: {
+              avatar_url: avatarUrl,
+              avatar_seed: seed,
+              avatar_style: style,
+            },
           })
-          .eq("id", currentUser.id)
+          .eq("id", currentUser.id),
       ]);
 
       if (authResult.error) {
@@ -154,44 +174,13 @@ export default function Community() {
       }
 
       if (perfilUpdateResult.error) {
-        console.error("Erro ao atualizar avatar no perfil:", perfilUpdateResult.error);
+        console.error(
+          "Erro ao atualizar avatar no perfil:",
+          perfilUpdateResult.error
+        );
         throw perfilUpdateResult.error;
       }
 
-      // Atualizar as discussões para refletir o novo avatar
-      const { data: allDiscussions, error: fetchError } = await supabase
-        .from("publicacao_comunidade")
-        .select(
-          `
-          *,
-          usuario:usuario_id(
-            id,
-            nome,
-            user_metadata
-          ),
-          comentarios:comentarios_comunidade(
-            id,
-            conteudo,
-            criado_em,
-            usuario_id,
-            curtidas,
-            usuario:usuario_id(
-              id,
-              nome,
-              user_metadata
-            )
-          )
-        `
-        )
-        .order("criado_em", { ascending: false });
-
-      if (fetchError) {
-        console.error("Erro ao buscar discussões atualizadas:", fetchError);
-        throw fetchError;
-      }
-
-      // Atualizar o estado com todas as discussões atualizadas
-      setDiscussions(allDiscussions);
       setSelectedStyle(style);
       setSelectedSeed(seed);
       setDialogOpen(false);
@@ -199,6 +188,9 @@ export default function Community() {
       toast({
         description: "Avatar atualizado com sucesso!",
       });
+
+      // Forçar atualização das discussões para mostrar o novo avatar
+      await loadDiscussions();
     } catch (error) {
       console.error("Erro detalhado ao atualizar avatar:", error);
       toast({
@@ -328,7 +320,7 @@ export default function Community() {
         description: "Avatar atualizado com sucesso!",
       });
 
-      await refreshDiscussions(currentUser.id);
+      await loadDiscussions();
       console.log("Discussões atualizadas com sucesso");
     } catch (error) {
       console.error("Erro detalhado ao fazer upload do avatar:", error);
@@ -350,28 +342,49 @@ export default function Community() {
       return;
     }
 
-    // Encontra a discussão atual
-    const discussion = discussions.find((d) => d.id === discussionId);
-    if (!discussion) return;
-
-    // Atualiza o estado localmente primeiro (otimista)
-    const updatedDiscussions = discussions.map((d) => {
-      if (d.id === discussionId) {
-        return {
-          ...d,
-          likes_count: d.user_has_liked ? d.likes_count - 1 : d.likes_count + 1,
-          user_has_liked: !d.user_has_liked,
-        };
-      }
-      return d;
-    });
-
-    // Atualiza o estado imediatamente
-    setDiscussions(updatedDiscussions);
+    if (isLiking) return; // Previne múltiplos cliques
+    setIsLiking(true);
 
     try {
+      // Encontra a discussão atual
+      const discussion = discussions.find((d) => d.id === discussionId);
+      if (!discussion) return;
+
+      // Verifica o estado atual do like
+      const isLiked = await checkUserLike(discussionId, currentUser.id);
+
+      // Atualiza o estado localmente primeiro (otimista)
+      const updatedDiscussions = discussions.map((d) => {
+        if (d.id === discussionId) {
+          return {
+            ...d,
+            curtidas: Math.max(0, (d.curtidas || 0) + (isLiked ? -1 : 1)),
+            isLiked: !isLiked,
+          };
+        }
+        return d;
+      });
+
+      // Atualiza o estado imediatamente
+      setDiscussions(updatedDiscussions);
+
       // Faz a requisição ao servidor em background
-      await toggleDiscussionLike(discussionId, currentUser.id);
+      const result = await toggleDiscussionLike(discussionId, currentUser.id);
+
+      if (result) {
+        // Atualiza com o resultado do servidor
+        const finalDiscussions = discussions.map((d) => {
+          if (d.id === discussionId) {
+            return {
+              ...d,
+              isLiked: result.liked,
+            };
+          }
+          return d;
+        });
+
+        setDiscussions(finalDiscussions);
+      }
     } catch (error) {
       console.error("Erro ao curtir/descurtir:", error);
       // Reverte a atualização otimista em caso de erro
@@ -380,6 +393,8 @@ export default function Community() {
         variant: "destructive",
         description: "Erro ao processar sua ação.",
       });
+    } finally {
+      setIsLiking(false);
     }
   };
 
@@ -440,21 +455,25 @@ export default function Community() {
 
     try {
       // Faz a requisição ao servidor em background
-      const newComment = await addComment(discussionId, commentText, currentUser.id);
-      
+      const newComment = await addComment(
+        discussionId,
+        commentText,
+        currentUser.id
+      );
+
       // Atualiza o comentário com os dados reais do servidor
       const finalDiscussions = discussions.map((d) => {
         if (d.id === discussionId) {
           return {
             ...d,
-            comentarios: d.comentarios.map((c) => 
+            comentarios: d.comentarios.map((c) =>
               c.id === tempComment.id ? newComment : c
             ),
           };
         }
         return d;
       });
-      
+
       setDiscussions(finalDiscussions);
     } catch (error) {
       console.error("Erro ao adicionar comentário:", error);
@@ -486,7 +505,7 @@ export default function Community() {
       if (editor) {
         editor.innerHTML = "";
       }
-      refreshDiscussions(currentUser.id);
+      await loadDiscussions();
 
       toast({
         description: "Publicação criada com sucesso!",
@@ -509,7 +528,7 @@ export default function Community() {
         title: "Publicação excluída",
         description: "Sua publicação foi excluída com sucesso.",
       });
-      refreshDiscussions(currentUser.id);
+      await loadDiscussions();
     } catch (error) {
       console.error("Erro ao excluir publicação:", error);
       toast({
@@ -537,7 +556,7 @@ export default function Community() {
   const handleScroll = (e) => {
     const bottom =
       e.target.scrollHeight - e.target.scrollTop === e.target.clientHeight;
-    if (bottom && !discussionsLoading && visiblePosts < discussions.length) {
+    if (bottom && visiblePosts < discussions.length) {
       setVisiblePosts((prev) => prev + 5);
     }
   };
@@ -549,16 +568,21 @@ export default function Community() {
     }
   }, [currentUser]);
 
-  if (accessLoading || discussionsLoading) {
+  if (!hasAccess) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
+      <div className="flex flex-col items-center justify-center min-h-screen p-4">
+        <h1 className="text-2xl font-bold mb-4">Acesso Restrito</h1>
+        <p className="text-gray-600 text-center mb-4">
+          Você precisa estar logado para acessar a comunidade.
+        </p>
+        <Link
+          href="/login"
+          className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+        >
+          Fazer Login
+        </Link>
       </div>
     );
-  }
-
-  if (!hasAccess) {
-    return null;
   }
 
   return (

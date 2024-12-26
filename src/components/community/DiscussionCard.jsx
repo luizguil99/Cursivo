@@ -51,7 +51,7 @@ export default function DiscussionCard({
                 avatar_url: perfil.user_metadata?.avatar_url,
                 avatar_style: perfil.user_metadata?.avatar_style,
                 avatar_seed: perfil.user_metadata?.avatar_seed,
-              }
+              },
             });
           }
         } catch (error) {
@@ -172,7 +172,7 @@ export default function DiscussionCard({
                 onClick={() => onLike(discussion.id)}
                 disabled={isLiking}
                 className={`flex items-center space-x-1 ${
-                  discussion.curtidas
+                  discussion.isLiked
                     ? "text-blue-600"
                     : "text-gray-500 hover:text-blue-600"
                 }`}

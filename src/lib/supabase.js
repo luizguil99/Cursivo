@@ -163,43 +163,66 @@ export const getUserProgress = async (userId) => {
 // Funções da Comunidade
 
 // Buscar todas as discussões
-export const getDiscussions = async (userId) => {
+export const getDiscussions = async () => {
   try {
-    // Buscar discussões com comentários e perfis dos usuários
     const { data: discussions, error } = await supabase
       .from("publicacao_comunidade")
-      .select(
-        `
+      .select(`
         *,
         usuario:usuario_id (
-          id,
-          nome,
-          user_metadata
+          *
         ),
         comentarios:comentarios_comunidade (
-          id,
-          conteudo,
-          criado_em,
-          usuario_id,
-          curtidas,
+          *,
           usuario:usuario_id (
-            id,
-            nome,
-            user_metadata
+            *
           )
         )
-      `
-      )
+      `)
       .order("criado_em", { ascending: false });
 
     if (error) throw error;
 
-    // Processa as discussões para adicionar informações de curtidas
-    const processedDiscussions = discussions.map((discussion) => ({
-      ...discussion,
-      likes_count: discussion.curtidas || 0,
-      comments_count: discussion.comentarios_count || 0,
-    }));
+    // Buscar os perfis atualizados para cada usuário único
+    const userIds = new Set();
+    discussions.forEach(discussion => {
+      userIds.add(discussion.usuario_id);
+      discussion.comentarios?.forEach(comment => {
+        userIds.add(comment.usuario_id);
+      });
+    });
+
+    const { data: profiles } = await supabase
+      .from('perfis')
+      .select('*')
+      .in('id', Array.from(userIds));
+
+    // Criar um mapa de perfis por ID
+    const profilesMap = new Map(profiles.map(p => [p.id, p]));
+
+    // Atualizar os metadados dos usuários nas discussões
+    const processedDiscussions = discussions.map(discussion => {
+      const userProfile = profilesMap.get(discussion.usuario_id);
+      return {
+        ...discussion,
+        usuario: {
+          ...discussion.usuario,
+          ...userProfile,
+        },
+        comentarios: discussion.comentarios?.map(comment => {
+          const commentUserProfile = profilesMap.get(comment.usuario_id);
+          return {
+            ...comment,
+            usuario: {
+              ...comment.usuario,
+              ...commentUserProfile,
+            },
+          };
+        }),
+        curtidas: discussion.curtidas || 0,
+        comentarios_count: discussion.comentarios?.length || 0,
+      };
+    });
 
     return processedDiscussions;
   } catch (error) {
@@ -291,14 +314,16 @@ export const addComment = async (discussionId, content, userId) => {
           usuario_id: userId,
         },
       ])
-      .select(`
+      .select(
+        `
         *,
         usuario:usuario_id (
           id,
           nome,
           user_metadata
         )
-      `)
+      `
+      )
       .single();
 
     if (error) throw error;
@@ -335,25 +360,77 @@ export const addComment = async (discussionId, content, userId) => {
   }
 };
 
-// Curtir/descurtir uma discussão
-export const toggleDiscussionLike = async (discussionId, userId) => {
+// Verificar se o usuário curtiu uma publicação
+export const checkUserLike = async (publicacaoId, userId) => {
   try {
-    const { data: publicacao } = await supabase
-      .from("publicacao_comunidade")
-      .select("curtidas")
-      .eq("id", discussionId)
-      .single();
+    const { count } = await supabase
+      .from("publicacoes_curtidas")
+      .select("*", { count: "exact", head: true })
+      .eq("publicacao_id", publicacaoId)
+      .eq("usuario_id", userId);
 
-    const { error } = await supabase
-      .from("publicacao_comunidade")
-      .update({
-        curtidas: (publicacao.curtidas || 0) + 1,
-      })
-      .eq("id", discussionId);
-
-    if (error) throw error;
+    return count > 0;
   } catch (error) {
-    console.error("Erro ao curtir/descurtir discussão:", error);
+    console.error("Erro ao verificar curtida:", error);
+    return false;
+  }
+};
+
+// Curtir/descurtir uma publicação
+export const toggleDiscussionLike = async (publicacaoId, userId) => {
+  try {
+    // Verifica se já existe uma curtida
+    const hasLike = await checkUserLike(publicacaoId, userId);
+
+    if (hasLike) {
+      // Remove a curtida
+      const { error: deleteError } = await supabase
+        .from("publicacoes_curtidas")
+        .delete()
+        .eq("publicacao_id", publicacaoId)
+        .eq("usuario_id", userId);
+
+      if (deleteError) throw deleteError;
+
+      // Decrementa o contador
+      const { error: updateError } = await supabase.rpc(
+        "decrement_publicacao_curtidas",
+        { publicacao_id: publicacaoId }
+      );
+
+      if (updateError) throw updateError;
+
+      return { liked: false };
+    } else {
+      // Adiciona a curtida
+      const { error: insertError } = await supabase
+        .from("publicacoes_curtidas")
+        .insert([
+          {
+            publicacao_id: publicacaoId,
+            usuario_id: userId,
+          },
+        ]);
+
+      // Se der erro de violação de unicidade, significa que a curtida já existe
+      if (insertError && insertError.code === "23505") {
+        return { liked: true };
+      }
+
+      if (insertError) throw insertError;
+
+      // Incrementa o contador
+      const { error: updateError } = await supabase.rpc(
+        "increment_publicacao_curtidas",
+        { publicacao_id: publicacaoId }
+      );
+
+      if (updateError) throw updateError;
+
+      return { liked: true };
+    }
+  } catch (error) {
+    console.error("Erro ao curtir/descurtir publicação:", error);
     throw error;
   }
 };
