@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/lib/supabase";
 import AIChat from "./AIChat";
-import confetti from 'canvas-confetti';
+import confetti from "canvas-confetti";
 
 function PracticeModal({ course, topic, onClose }) {
   const [currentQuestion, setCurrentQuestion] = useState(0);
@@ -149,7 +149,7 @@ function PracticeModal({ course, topic, onClose }) {
         particleCount: 100,
         spread: 70,
         origin: { y: 0.6 },
-        colors: ['#FFD700', '#FFA500', '#FF6347'] // Cores dourado, laranja e vermelho-tomate
+        colors: ["#FFD700", "#FFA500", "#FF6347"], // Cores dourado, laranja e vermelho-tomate
       });
     }
   };
@@ -278,7 +278,9 @@ function PracticeModal({ course, topic, onClose }) {
                         disabled={selectedAnswer !== null || isStricken}
                       >
                         <span
-                          className={isStricken ? "line-through opacity-50" : ""}
+                          className={
+                            isStricken ? "line-through opacity-50" : ""
+                          }
                         >
                           <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#F3C92C] text-black font-medium mr-2">
                             {String.fromCharCode(97 + index)}
