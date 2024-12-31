@@ -18,21 +18,33 @@ export function NextActivities({ nextLesson }) {
           // Buscar informações do curso
           const { data: curso, error: cursoError } = await supabase
             .from("cursos")
-            .select("titulo")
+            .select("*")  // Seleciona todos os campos do curso
             .eq("id", nextLesson.modulos.curso_id)
             .single();
 
           if (cursoError) throw cursoError;
-          setCursoInfo(curso);
 
-          // Buscar número de questões
-          const { count, error: questoesError } = await supabase
+          // Formata o objeto do curso para incluir name/title como no PracticeModal
+          const formattedCourse = {
+            ...curso,
+            name: curso.titulo,  // Adiciona o campo name para compatibilidade
+            title: curso.titulo  // Adiciona o campo title para compatibilidade
+          };
+          
+          setCursoInfo(formattedCourse);
+
+          // Buscar número de questões usando o título do curso
+          const { data: questoes, error: questoesError } = await supabase
             .from("questoes")
-            .select("id", { count: 'exact' })
-            .eq("topico", nextLesson.modulos.titulo);
+            .select("*")
+            .eq("assunto", curso.titulo);
 
-          if (questoesError) throw questoesError;
-          setNumQuestoes(count || 0);
+          if (questoesError) {
+            console.error("Erro ao buscar questões:", questoesError);
+            throw questoesError;
+          }
+
+          setNumQuestoes(questoes?.length || 0);
         } catch (error) {
           console.error("Erro ao buscar informações:", error);
         }
@@ -40,7 +52,7 @@ export function NextActivities({ nextLesson }) {
     };
 
     fetchCursoInfo();
-  }, [nextLesson?.modulos?.curso_id, nextLesson?.modulos?.titulo]);
+  }, [nextLesson?.modulos?.curso_id]);
 
   const navigateToNextLesson = () => {
     if (nextLesson?.modulos?.curso_id) {
@@ -84,9 +96,6 @@ export function NextActivities({ nextLesson }) {
                 </span>
               )}
             </div>
-            <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-              {nextLesson?.modulos?.titulo || ""}
-            </p>
           </div>
           <Button
             variant="outline"
@@ -109,12 +118,9 @@ export function NextActivities({ nextLesson }) {
                 Questões de {cursoInfo?.titulo || ""}
               </p>
               <span className="px-2 py-0.5 text-xs border border-primary/20 text-primary rounded-full">
-                {numQuestoes} questões
+                {numQuestoes} {numQuestoes === 1 ? 'questão' : 'questões'}
               </span>
             </div>
-            <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-              {nextLesson?.modulos?.titulo || ""}
-            </p>
           </div>
           <Button
             onClick={() => setShowPracticeModal(true)}
@@ -128,11 +134,9 @@ export function NextActivities({ nextLesson }) {
 
       {showPracticeModal && (
         <PracticeModal
-          course={cursoInfo?.titulo}
-          topic={nextLesson?.titulo}
+          course={cursoInfo}
           onClose={() => setShowPracticeModal(false)}
           onQuestionComplete={handlePracticeComplete}
-          totalQuestions={numQuestoes}
         />
       )}
     </div>
