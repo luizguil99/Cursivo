@@ -28,7 +28,13 @@ import { StudyTimeCard } from "./StudyTimeCard";
 import { ContinueStudying } from "./ContinueStudying";
 import { NextActivities } from "./NextActivities";
 
-function CourseContent({ lesson, onVideoEnd, updateSidebarCompletion }) {
+function CourseContent({
+  lesson,
+  onVideoEnd,
+  updateSidebarCompletion,
+  handleCoursesClick,
+  onScheduleClick,
+}) {
   const navigate = useNavigate();
   const location = useLocation();
   const { currentUser } = useAuth();
@@ -44,6 +50,8 @@ function CourseContent({ lesson, onVideoEnd, updateSidebarCompletion }) {
     aulasRestantes: 0,
   });
   const [proximaAula, setProximaAula] = useState(null);
+  const [showCourses, setShowCourses] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
 
   // Buscar notificações do Supabase
   useEffect(() => {
@@ -481,8 +489,15 @@ function CourseContent({ lesson, onVideoEnd, updateSidebarCompletion }) {
                 </div>
                 {/* Último Curso */}
                 <div className="flex flex-col gap-6 lg:gap-8">
-                  <ContinueStudying proximaAulaCallback={(aula) => setProximaAula(aula)} />
-                  <NextActivities nextLesson={proximaAula} />
+                  <ContinueStudying
+                    proximaAulaCallback={(aula) => setProximaAula(aula)}
+                    onCoursesClick={handleCoursesClick}
+                  />
+                  <NextActivities
+                    nextLesson={proximaAula}
+                    onCoursesClick={handleCoursesClick}
+                    onScheduleClick={onScheduleClick}
+                  />
                 </div>
                 {/* Próximas Atividades */}
               </div>

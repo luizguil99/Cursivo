@@ -15,6 +15,8 @@ function Courses() {
   const [showSchedule, setShowSchedule] = useState(false);
   const [moduleSidebarCollapsed, setModuleSidebarCollapsed] = useState(false);
   const [updateSidebarCompletion, setUpdateSidebarCompletion] = useState(null);
+  const [showCourses, setShowCourses] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
 
   useEffect(() => {
     const loadCourseData = async () => {
@@ -191,6 +193,15 @@ function Courses() {
     }
   };
 
+  // Função para lidar com o clique em cursos
+  const handleCoursesClick = () => {
+    if (window.innerWidth < 768) {
+      setShowMobileMenu(true);
+    } else {
+      setShowCourses(!showCourses);
+    }
+  };
+
   return (
     <div className="h-screen flex flex-col">
       <TopNav />
@@ -198,6 +209,14 @@ function Courses() {
         <Sidebar
           onCourseSelect={handleCourseSelect}
           onScheduleClick={() => setShowSchedule(!showSchedule)}
+          onModuleSidebarToggle={(collapsed) =>
+            setModuleSidebarCollapsed(collapsed)
+          }
+          showCourses={showCourses}
+          setShowCourses={setShowCourses}
+          showMobileMenu={showMobileMenu}
+          setShowMobileMenu={setShowMobileMenu}
+          showSchedule={showSchedule}
         />
         {selectedCourse && (
           <ModulesSidebar
@@ -215,6 +234,8 @@ function Courses() {
             <CourseContent
               lesson={selectedLesson}
               updateSidebarCompletion={updateSidebarCompletion}
+              handleCoursesClick={handleCoursesClick}
+              onScheduleClick={() => setShowSchedule(!showSchedule)}
               onVideoEnd={async () => {
                 // Atualizar a bolinha na sidebar imediatamente
                 if (updateSidebarCompletion) {

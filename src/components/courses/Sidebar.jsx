@@ -40,28 +40,34 @@ const PulsingDot = ({ isActive }) => (
   </span>
 );
 
-function Sidebar({ onCourseSelect, onScheduleClick, onModuleSidebarToggle }) {
+function Sidebar({
+  onCourseSelect,
+  onScheduleClick,
+  onModuleSidebarToggle,
+  showCourses,
+  setShowCourses,
+  showMobileMenu,
+  setShowMobileMenu,
+  showSchedule,
+}) {
   const [collapsed, setCollapsed] = React.useState(false);
-  const [showCourses, setShowCourses] = React.useState(false);
-  const [showMobileMenu, setShowMobileMenu] = React.useState(false);
-  const [showSchedule, setShowSchedule] = React.useState(false);
   const [hasLiveEvent, setHasLiveEvent] = React.useState(() => {
     try {
-      const cached = localStorage.getItem('liveEventStatus');
+      const cached = localStorage.getItem("liveEventStatus");
       if (cached) {
         const { value, expiry } = JSON.parse(cached);
         if (expiry > new Date().getTime()) {
           return value;
         } else {
-          localStorage.removeItem('liveEventStatus');
+          localStorage.removeItem("liveEventStatus");
         }
       }
     } catch (error) {
-      console.error('Erro ao ler cache:', error);
+      console.error("Erro ao ler cache:", error);
     }
     return false;
   });
-  
+
   const navigate = useNavigate();
   const { logout } = useAuth();
   const { theme } = useTheme();
@@ -70,11 +76,11 @@ function Sidebar({ onCourseSelect, onScheduleClick, onModuleSidebarToggle }) {
     try {
       const item = {
         value: status,
-        expiry: new Date().getTime() + (5 * 60 * 1000) // 5 minutos
+        expiry: new Date().getTime() + 5 * 60 * 1000, // 5 minutos
       };
-      localStorage.setItem('liveEventStatus', JSON.stringify(item));
+      localStorage.setItem("liveEventStatus", JSON.stringify(item));
     } catch (error) {
-      console.error('Erro ao salvar cache:', error);
+      console.error("Erro ao salvar cache:", error);
     }
   };
 
@@ -132,11 +138,11 @@ function Sidebar({ onCourseSelect, onScheduleClick, onModuleSidebarToggle }) {
     };
 
     // Só faz a verificação se não tiver cache válido
-    const cached = localStorage.getItem('liveEventStatus');
+    const cached = localStorage.getItem("liveEventStatus");
     if (!cached) {
       checkLiveEvents();
     }
-    
+
     const interval = setInterval(checkLiveEvents, 30000); // Verifica a cada 30 segundos
     return () => clearInterval(interval);
   }, []);
@@ -147,7 +153,6 @@ function Sidebar({ onCourseSelect, onScheduleClick, onModuleSidebarToggle }) {
       label: "Home",
       onClick: () => {
         if (showSchedule) {
-          setShowSchedule(false);
           onScheduleClick();
         } else {
           onCourseSelect(null);
@@ -167,7 +172,6 @@ function Sidebar({ onCourseSelect, onScheduleClick, onModuleSidebarToggle }) {
       icon: <CalendarDays className="h-5 w-5" />,
       label: "Cronograma",
       onClick: () => {
-        setShowSchedule(true);
         onScheduleClick();
       },
     },
