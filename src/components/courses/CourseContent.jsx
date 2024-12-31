@@ -9,7 +9,7 @@ import {
   Clock,
   ArrowRight,
 } from "lucide-react";
-import { useNavigate, useLocation, useParams } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import FloatingChatButton from "./FloatingChatButton";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
@@ -21,41 +21,28 @@ import {
   setNotificationsCache,
   invalidateNotificationsCache,
 } from "@/lib/notificationsCache";
-import { useAchievements } from "@/hooks/useAchievements";
-import { AchievementsModal } from "@/components/achievements/AchievementsModal";
+import { CompletedExercisesCard } from "./CompletedExercisesCard";
+import { CompletedLessonsCard } from "./CompletedLessonsCard";
+import { AchievementsCard } from "./AchievementsCard";
+import { StudyTimeCard } from "./StudyTimeCard";
 import { ContinueStudying } from "./ContinueStudying";
-import { NextActivities } from "./NextActivities";
 
-function CourseContent() {
-  const { courseId, moduleId, lessonId } = useParams();
+function CourseContent({ lesson, onVideoEnd, updateSidebarCompletion }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { currentUser } = useAuth();
-  const { unlockedAchievements, showModal, currentAchievement, setShowModal } =
-    useAchievements(currentUser?.id);
-  const [showAchievements, setShowAchievements] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [currentVideoId, setCurrentVideoId] = useState(null);
   const [isChangingLesson, setIsChangingLesson] = useState(false);
   const [notifications, setNotifications] = useState(
     () => getNotificationsFromCache() || []
   );
-  const [completedLessons, setCompletedLessons] = useState([]);
-  const [todayLessons, setTodayLessons] = useState(0);
-  const [completedQuestions, setCompletedQuestions] = useState(0);
-  const [todayQuestions, setTodayQuestions] = useState(0);
-  const [horasEstudadas, setHorasEstudadas] = useState("0h");
-  const [tempoHoje, setTempoHoje] = useState("0h");
   const [ultimaAulaVista, setUltimaAulaVista] = useState(null);
   const [progressoCurso, setProgressoCurso] = useState({
     porcentagem: 0,
     aulasRestantes: 0,
   });
   const [proximaAula, setProximaAula] = useState(null);
-  const [course, setCourse] = useState(null);
-  const [currentModule, setCurrentModule] = useState(null);
-  const [currentLesson, setCurrentLesson] = useState(null);
-  const [loading, setLoading] = useState(true);
 
   // Buscar notificações do Supabase
   useEffect(() => {
@@ -109,77 +96,194 @@ function CourseContent() {
     };
   }, []);
 
-  const fetchCompletedItems = useCallback(async () => {
-    if (!currentUser) return;
+  // Buscar última aula vista
+  const fetchUltimaAulaVista = async () => {
+    if (!currentUser?.id) return;
 
     try {
-      // Buscar todas as aulas concluídas
-      const { data: allLessons, error: allError } = await supabase
+      console.log("=== BUSCANDO ÚLTIMA AULA VISTA ===");
+      const { data, error } = await supabase
+        .from("aulas_concluidas")
+        .select(
+          `
+          videoaula_id,
+          concluido_em,
+          videoaulas (
+            id,
+            titulo,
+            modulo_id,
+            modulos (
+              id,
+              titulo,
+              curso_id,
+              cursos (
+                id,
+                titulo
+              )
+            )
+          )
+        `
+        )
+        .eq("usuario_id", currentUser.id)
+        .order("concluido_em", { ascending: false })
+        .limit(1);
+
+      if (error) throw error;
+
+      console.log("Última aula vista:", data?.[0]);
+      if (data && data.length > 0) {
+        setUltimaAulaVista(data[0]);
+      }
+    } catch (error) {
+      console.error("Erro ao buscar última aula vista:", error);
+    }
+  };
+
+  // Buscar última aula vista quando o usuário mudar
+  useEffect(() => {
+    fetchUltimaAulaVista();
+  }, [currentUser?.id]);
+
+  // Atualizar última aula quando uma aula for concluída
+  useEffect(() => {
+    const handleLessonCompleted = () => {
+      console.log(
+        "Evento lessonCompleted recebido, atualizando última aula..."
+      );
+      fetchUltimaAulaVista();
+    };
+
+    window.addEventListener("lessonCompleted", handleLessonCompleted);
+    return () =>
+      window.removeEventListener("lessonCompleted", handleLessonCompleted);
+  }, []);
+
+  // Função para calcular o progresso do curso
+  const calcularProgressoCurso = async (cursoId) => {
+    if (!currentUser?.id || !cursoId) return;
+
+    try {
+      console.log("=== CALCULANDO PROGRESSO DO CURSO ===", cursoId);
+
+      // Buscar total de aulas do curso
+      const { data: totalAulas, error: errorTotal } = await supabase
+        .from("videoaulas")
+        .select("id, modulo_id, modulos!inner (curso_id)")
+        .eq("modulos.curso_id", cursoId);
+
+      if (errorTotal) throw errorTotal;
+
+      // Buscar aulas concluídas do usuário neste curso
+      const { data: aulasCompletas, error: errorCompletas } = await supabase
+        .from("aulas_concluidas")
+        .select(
+          "videoaula_id, videoaulas!inner(modulo_id, modulos!inner(curso_id))"
+        )
+        .eq("usuario_id", currentUser.id)
+        .eq("videoaulas.modulos.curso_id", cursoId);
+
+      if (errorCompletas) throw errorCompletas;
+
+      // Calcular progresso
+      const total = totalAulas?.length || 0;
+      const completas = aulasCompletas?.length || 0;
+      const restantes = total - completas;
+      const porcentagem = total > 0 ? Math.round((completas / total) * 100) : 0;
+
+      console.log("Progresso calculado:", {
+        total,
+        completas,
+        restantes,
+        porcentagem,
+      });
+
+      setProgressoCurso({
+        porcentagem,
+        aulasRestantes: restantes,
+      });
+    } catch (error) {
+      console.error("Erro ao calcular progresso:", error);
+      setProgressoCurso({ porcentagem: 0, aulasRestantes: 0 });
+    }
+  };
+
+  // Atualizar progresso quando o curso mudar
+  useEffect(() => {
+    if (ultimaAulaVista?.videoaulas?.modulos?.curso_id) {
+      calcularProgressoCurso(ultimaAulaVista.videoaulas.modulos.curso_id);
+    }
+  }, [ultimaAulaVista, currentUser?.id]);
+
+  // Atualizar progresso quando uma aula for concluída
+  useEffect(() => {
+    const handleLessonCompleted = () => {
+      console.log("Evento lessonCompleted recebido, atualizando progresso...");
+      if (ultimaAulaVista?.videoaulas?.modulos?.curso_id) {
+        calcularProgressoCurso(ultimaAulaVista.videoaulas.modulos.curso_id);
+      }
+    };
+
+    window.addEventListener("lessonCompleted", handleLessonCompleted);
+    return () =>
+      window.removeEventListener("lessonCompleted", handleLessonCompleted);
+  }, [ultimaAulaVista]);
+
+  // Função para buscar a próxima aula
+  const buscarProximaAula = async () => {
+    if (!currentUser?.id || !ultimaAulaVista?.videoaulas?.modulos?.curso_id)
+      return;
+
+    try {
+      console.log("=== BUSCANDO PRÓXIMA AULA ===");
+      const cursoId = ultimaAulaVista.videoaulas.modulos.curso_id;
+
+      // Buscar todas as videoaulas do curso em ordem
+      const { data: aulas, error: errorAulas } = await supabase
+        .from("videoaulas")
+        .select(
+          `
+          id, 
+          titulo, 
+          ordem_indice,
+          modulo_id,
+          modulos!inner (
+            id,
+            titulo,
+            ordem_indice,
+            curso_id
+          )
+        `
+        )
+        .eq("modulos.curso_id", cursoId)
+        .order("modulos.ordem_indice", { ascending: true })
+        .order("ordem_indice", { ascending: true });
+
+      if (errorAulas) throw errorAulas;
+
+      // Buscar aulas concluídas
+      const { data: aulasCompletas, error: errorCompletas } = await supabase
         .from("aulas_concluidas")
         .select("videoaula_id")
         .eq("usuario_id", currentUser.id);
 
-      if (allError) throw allError;
-      setCompletedLessons(allLessons.map((item) => item.videoaula_id));
+      if (errorCompletas) throw errorCompletas;
 
-      // Buscar aulas concluídas hoje
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
+      const aulasCompletasIds = aulasCompletas.map((a) => a.videoaula_id);
+      const proximaAula = aulas.find(
+        (aula) => !aulasCompletasIds.includes(aula.id)
+      );
 
-      const { data: todayData, error: todayError } = await supabase
-        .from("aulas_concluidas")
-        .select("videoaula_id, concluido_em")
-        .eq("usuario_id", currentUser.id)
-        .gte("concluido_em", today.toISOString())
-        .lt("concluido_em", tomorrow.toISOString());
-
-      if (todayError) throw todayError;
-      setTodayLessons(todayData.length);
-
-      // Buscar total de questões concluídas
-      const { data: allQuestions, error: questionsError } = await supabase
-        .from("questoes_concluidas")
-        .select("id")
-        .eq("usuario_id", currentUser.id);
-
-      if (questionsError) throw questionsError;
-      setCompletedQuestions(allQuestions.length);
-
-      // Buscar questões concluídas hoje
-      const { data: todayQuestions, error: todayQuestionsError } =
-        await supabase
-          .from("questoes_concluidas")
-          .select("id")
-          .eq("usuario_id", currentUser.id)
-          .gte("concluido_em", today.toISOString())
-          .lt("concluido_em", tomorrow.toISOString());
-
-      if (todayQuestionsError) throw todayQuestionsError;
-      setTodayQuestions(todayQuestions.length);
+      console.log("Próxima aula encontrada:", proximaAula);
+      setProximaAula(proximaAula);
     } catch (error) {
-      console.error("Erro ao buscar itens concluídos:", error);
+      console.error("Erro ao buscar próxima aula:", error);
     }
-  }, [currentUser]);
+  };
 
-  // Buscar aulas e questões concluídas do Supabase
+  // Buscar próxima aula quando a última aula vista mudar
   useEffect(() => {
-    fetchCompletedItems();
-  }, [fetchCompletedItems]);
-
-  // Escutar o evento de questão concluída
-  useEffect(() => {
-    const handleQuestionCompleted = () => {
-      fetchCompletedItems();
-    };
-
-    window.addEventListener("questionCompleted", handleQuestionCompleted);
-
-    return () => {
-      window.removeEventListener("questionCompleted", handleQuestionCompleted);
-    };
-  }, [fetchCompletedItems]);
+    buscarProximaAula();
+  }, [ultimaAulaVista, currentUser?.id]);
 
   // Função para formatar o tempo relativo
   const formatRelativeTime = (dateString) => {
@@ -216,23 +320,23 @@ function CourseContent() {
 
   // Efeito para limpar o estado quando a aula muda
   useEffect(() => {
-    if (currentLesson?.id !== currentVideoId) {
+    if (lesson?.id !== currentVideoId) {
       setIsLoading(true);
-      setCurrentVideoId(currentLesson?.id);
+      setCurrentVideoId(lesson?.id);
     }
-  }, [currentLesson?.id, currentVideoId]);
+  }, [lesson?.id, currentVideoId]);
 
   // Verifica se a aula já foi concluída
   useEffect(() => {
     const checkLessonCompletion = async () => {
-      if (!currentUser?.id || !currentLesson?.id) return;
+      if (!currentUser?.id || !lesson?.id) return;
 
       try {
         const { data, error } = await supabase
           .from("aulas_concluidas")
           .select("concluido_em")
           .eq("usuario_id", currentUser.id)
-          .eq("videoaula_id", currentLesson.id)
+          .eq("videoaula_id", lesson.id)
           .single();
 
         if (error && error.code !== "PGRST116") {
@@ -246,40 +350,34 @@ function CourseContent() {
       }
     };
 
-    if (currentVideoId === currentLesson?.id) {
+    if (currentVideoId === lesson?.id) {
       checkLessonCompletion();
     }
-  }, [currentUser?.id, currentLesson?.id, currentVideoId]);
+  }, [currentUser?.id, lesson?.id, currentVideoId]);
 
   // Função para lidar com o fim do vídeo
   const handleVideoEnd = useCallback(async () => {
-    if (!currentUser?.id || !currentLesson?.id) return;
-
-    try {
-      // Ativar loading de transição
-      setIsChangingLesson(true);
-
-      // Disparar evento de aula concluída
-      window.dispatchEvent(new CustomEvent("lessonCompleted"));
-
-      // Atualizar a barra lateral se necessário
-      if (location.state?.updateSidebarCompletion) {
-        location.state.updateSidebarCompletion();
-      }
-
-      // Chamar callback de vídeo finalizado se existir
-      if (location.state?.onVideoEnd) {
-        location.state.onVideoEnd();
-      }
-    } catch (error) {
-      console.error("Erro ao marcar aula como concluída:", error);
+    if (!currentUser?.id || !lesson?.id) {
+      console.log("Usuário não logado ou aula não encontrada");
+      return;
     }
-  }, [currentUser?.id, currentLesson?.id, location.state]);
+
+    // Ativar loading
+    setIsChangingLesson(true);
+
+    // Atualizar a bolinha na sidebar imediatamente
+    if (updateSidebarCompletion) {
+      updateSidebarCompletion(lesson.id, true);
+    }
+
+    // Chamar onVideoEnd imediatamente para uma experiência mais responsiva
+    if (onVideoEnd) onVideoEnd();
+  }, [currentUser?.id, lesson?.id, onVideoEnd, updateSidebarCompletion]);
 
   // Desativar loading quando mudar de aula
   useEffect(() => {
     setIsChangingLesson(false);
-  }, [currentLesson?.id]);
+  }, [lesson?.id]);
 
   // Função para converter URLs de vídeo em URLs de embed
   const getVideoEmbedUrl = (url) => {
@@ -340,385 +438,11 @@ function CourseContent() {
     return null;
   };
 
-  const isVimeoVideo = currentLesson?.videoUrl?.includes("vimeo.com");
-  const vimeoId = isVimeoVideo ? getVimeoId(currentLesson.videoUrl) : null;
-  const videoUrl = currentLesson?.videoUrl;
-
-  // Função para formatar o tempo total
-  const formatarTempoEstudado = (totalSegundos) => {
-    const horas = Math.floor(totalSegundos / 3600);
-    const minutos = Math.floor((totalSegundos % 3600) / 60);
-
-    if (horas > 0) {
-      return `${horas}h`;
-    } else if (minutos > 0) {
-      return `${minutos} min`;
-    }
-    return "0h";
-  };
-
-  // Função para buscar o total de horas estudadas
-  const fetchTotalHorasEstudadas = async () => {
-    try {
-      // Busca todas as aulas concluídas
-      const { data, error } = await supabase
-        .from("aulas_concluidas")
-        .select("tempo_assistido, concluido_em")
-        .eq("usuario_id", currentUser?.id);
-
-      if (error) throw error;
-
-      // Pega a data de hoje
-      const hoje = new Date();
-      hoje.setHours(0, 0, 0, 0);
-
-      // Separa os tempos de hoje e total
-      const { tempoHoje, tempoTotal } = data.reduce(
-        (acc, aula) => {
-          const tempoAssistido = aula.tempo_assistido || 0;
-          const dataConclusao = new Date(aula.concluido_em);
-          dataConclusao.setHours(0, 0, 0, 0);
-
-          // Se foi concluído hoje, soma ao tempo de hoje
-          if (dataConclusao.getTime() === hoje.getTime()) {
-            acc.tempoHoje += tempoAssistido;
-          }
-
-          // Soma ao tempo total
-          acc.tempoTotal += tempoAssistido;
-
-          return acc;
-        },
-        { tempoHoje: 0, tempoTotal: 0 }
-      );
-
-      return {
-        total: formatarTempoEstudado(tempoTotal),
-        hoje: formatarTempoEstudado(tempoHoje),
-      };
-    } catch (error) {
-      console.error("Erro ao buscar horas estudadas:", error);
-      return { total: "0h", hoje: "0h" };
-    }
-  };
-
-  // Atualiza as horas estudadas quando o usuário mudar
-  useEffect(() => {
-    if (currentUser?.id) {
-      fetchTotalHorasEstudadas().then((tempos) => {
-        setHorasEstudadas(tempos.total);
-        setTempoHoje(tempos.hoje);
-      });
-    }
-  }, [currentUser?.id]);
-
-  // Atualiza as horas quando uma aula for concluída
-  useEffect(() => {
-    const handleLessonCompleted = () => {
-      if (currentUser?.id) {
-        fetchTotalHorasEstudadas().then((tempos) => {
-          setHorasEstudadas(tempos.total);
-          setTempoHoje(tempos.hoje);
-        });
-      }
-    };
-
-    window.addEventListener("lessonCompleted", handleLessonCompleted);
-    return () =>
-      window.removeEventListener("lessonCompleted", handleLessonCompleted);
-  }, [currentUser?.id]);
-
-  // Buscar última aula vista
-  const fetchUltimaAulaVista = async () => {
-    if (!currentUser?.id) return;
-
-    try {
-      const { data, error } = await supabase
-        .from("aulas_concluidas")
-        .select(
-          `
-          videoaula_id,
-          concluido_em,
-          videoaulas (
-            id,
-            titulo,
-            modulo_id,
-            modulos (
-              titulo,
-              curso_id,
-              cursos (
-                titulo
-              )
-            )
-          )
-        `
-        )
-        .eq("usuario_id", currentUser.id)
-        .order("concluido_em", { ascending: false })
-        .limit(1);
-
-      if (error) throw error;
-
-      if (data && data.length > 0) {
-        setUltimaAulaVista(data[0]);
-      }
-    } catch (error) {
-      console.error("Erro ao buscar última aula vista:", error);
-    }
-  };
-
-  // Buscar última aula vista quando o usuário mudar
-  useEffect(() => {
-    fetchUltimaAulaVista();
-  }, [currentUser?.id]);
-
-  // Atualizar última aula quando uma aula for concluída
-  useEffect(() => {
-    const handleLessonCompleted = () => {
-      fetchUltimaAulaVista();
-    };
-
-    window.addEventListener("lessonCompleted", handleLessonCompleted);
-    return () =>
-      window.removeEventListener("lessonCompleted", handleLessonCompleted);
-  }, []);
-
-  // Função para calcular o progresso do curso
-  const calcularProgressoCurso = async (cursoId) => {
-    if (!currentUser?.id || !cursoId) return;
-
-    try {
-      // Buscar total de aulas do curso
-      const { data: totalAulas, error: errorTotal } = await supabase
-        .from("videoaulas")
-        .select("id, modulo_id, modulos!inner (curso_id)")
-        .eq("modulos.curso_id", cursoId);
-
-      if (errorTotal) throw errorTotal;
-
-      // Buscar aulas concluídas do usuário neste curso
-      const { data: aulasCompletas, error: errorCompletas } = await supabase
-        .from("aulas_concluidas")
-        .select(
-          "videoaula_id, videoaulas!inner(modulo_id, modulos!inner(curso_id))"
-        )
-        .eq("usuario_id", currentUser.id)
-        .eq("videoaulas.modulos.curso_id", cursoId);
-
-      if (errorCompletas) throw errorCompletas;
-
-      // Calcular progresso
-      const total = totalAulas?.length || 0;
-      const completas = aulasCompletas?.length || 0;
-      const restantes = total - completas;
-      const porcentagem = total > 0 ? Math.round((completas / total) * 100) : 0;
-
-      setProgressoCurso({
-        porcentagem,
-        aulasRestantes: restantes,
-      });
-    } catch (error) {
-      console.error("Erro ao calcular progresso:", error);
-      setProgressoCurso({ porcentagem: 0, aulasRestantes: 0 });
-    }
-  };
-
-  // Atualizar progresso quando o curso mudar
-  useEffect(() => {
-    if (ultimaAulaVista?.videoaulas?.modulos?.curso_id) {
-      calcularProgressoCurso(ultimaAulaVista.videoaulas.modulos.curso_id);
-    }
-  }, [ultimaAulaVista, currentUser?.id]);
-
-  // Atualizar progresso quando uma aula for concluída
-  useEffect(() => {
-    const handleLessonCompleted = () => {
-      if (ultimaAulaVista?.videoaulas?.modulos?.curso_id) {
-        calcularProgressoCurso(ultimaAulaVista.videoaulas.modulos.curso_id);
-      }
-    };
-
-    window.addEventListener("lessonCompleted", handleLessonCompleted);
-    return () =>
-      window.removeEventListener("lessonCompleted", handleLessonCompleted);
-  }, [ultimaAulaVista]);
-
-  // Função para buscar a próxima aula
-  const buscarProximaAula = async () => {
-    if (!currentUser?.id) return;
-
-    try {
-      // Buscar todos os módulos do curso em ordem
-      const { data: modulos, error: errorModulos } = await supabase
-        .from("modulos")
-        .select(
-          `
-          id, 
-          titulo, 
-          ordem_indice,
-          curso_id
-        `
-        )
-        .order("ordem_indice", { ascending: true });
-
-      if (errorModulos) throw errorModulos;
-
-      // Buscar todas as videoaulas dos módulos
-      const { data: aulas, error: errorAulas } = await supabase
-        .from("videoaulas")
-        .select(
-          `
-          id, 
-          titulo, 
-          ordem_indice,
-          modulo_id,
-          modulos!inner (
-            id,
-            titulo,
-            ordem_indice,
-            curso_id
-          )
-        `
-        )
-        .order("ordem_indice", { ascending: true });
-
-      if (errorAulas) throw errorAulas;
-
-      // Organizar aulas por módulo
-      const aulasPorModulo = modulos.reduce((acc, modulo) => {
-        acc[modulo.id] = aulas
-          .filter((aula) => aula.modulo_id === modulo.id)
-          .sort((a, b) => a.ordem_indice - b.ordem_indice);
-        return acc;
-      }, {});
-
-      // Encontrar a posição da última aula vista
-      let encontrouUltimaAula = false;
-      let proximaAulaEncontrada = null;
-
-      for (const modulo of modulos) {
-        const aulasDoModulo = aulasPorModulo[modulo.id] || [];
-
-        for (const aula of aulasDoModulo) {
-          if (encontrouUltimaAula) {
-            proximaAulaEncontrada = aula;
-            break;
-          }
-
-          if (aula.id === ultimaAulaVista?.videoaulas?.id) {
-            encontrouUltimaAula = true;
-          }
-        }
-
-        if (proximaAulaEncontrada) break;
-      }
-
-      setProximaAula(proximaAulaEncontrada);
-    } catch (error) {
-      console.error("Erro ao buscar próxima aula:", error);
-    }
-  };
-
-  // Atualizar próxima aula quando a última aula vista mudar
-  useEffect(() => {
-    if (ultimaAulaVista?.videoaulas?.id) {
-      buscarProximaAula();
-    }
-  }, [ultimaAulaVista]);
-
-  useEffect(() => {
-    const fetchCourseData = async () => {
-      if (!courseId) {
-        setLoading(false);
-        return;
-      }
-
-      try {
-        setLoading(true);
-        // Buscar curso e módulos em uma única query
-        const { data: courseData, error: courseError } = await supabase
-          .from("cursos")
-          .select(
-            `
-            *,
-            modulos (
-              *,
-              videoaulas (*)
-            )
-          `
-          )
-          .eq("id", courseId)
-          .single();
-
-        if (courseError) throw courseError;
-
-        setCourse(courseData);
-
-        // Encontrar módulo atual
-        const foundModule = courseData?.modulos?.find((m) => m.id === moduleId);
-        setCurrentModule(foundModule);
-
-        // Encontrar aula atual
-        const foundLesson = foundModule?.videoaulas?.find(
-          (l) => l.id === lessonId
-        );
-        setCurrentLesson(foundLesson);
-        if (foundLesson) {
-          setCurrentVideoId(foundLesson.video_id);
-        }
-      } catch (error) {
-        console.error("Erro ao carregar dados do curso:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchCourseData();
-  }, [courseId, moduleId, lessonId]);
-
-  // Loading state para o conteúdo do curso
-  if (loading) {
-    return (
-      <div className="flex h-full">
-        {/* Loading para o sidebar */}
-        <div className="w-80 border-r border-border bg-card">
-          <div className="p-4 space-y-4">
-            <div className="h-8 w-3/4 bg-gray-200 animate-pulse rounded"></div>
-            <div className="space-y-2">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="space-y-2">
-                  <div className="h-6 w-full bg-gray-200 animate-pulse rounded"></div>
-                  <div className="pl-4 space-y-2">
-                    {[1, 2].map((j) => (
-                      <div
-                        key={j}
-                        className="h-4 w-5/6 bg-gray-200 animate-pulse rounded"
-                      ></div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Loading para o player de vídeo */}
-        <div className="flex-1 p-4">
-          <div className="space-y-4">
-            <div className="h-8 w-1/2 bg-gray-200 animate-pulse rounded"></div>
-            <div className="h-96 w-full bg-gray-200 animate-pulse rounded"></div>
-            <div className="space-y-2">
-              <div className="h-4 w-3/4 bg-gray-200 animate-pulse rounded"></div>
-              <div className="h-4 w-1/2 bg-gray-200 animate-pulse rounded"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
+  const isVimeoVideo = lesson?.videoUrl?.includes("vimeo.com");
+  const vimeoId = isVimeoVideo ? getVimeoId(lesson.videoUrl) : null;
+  const videoUrl = lesson?.videoUrl;
   // Se não houver lição ou se showExplore for true, mostra a página de exploração
-  if (!currentLesson || location.state?.showExplore) {
+  if (!lesson || location.state?.showExplore) {
     return (
       <div className="h-full overflow-y-auto bg-background">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
@@ -742,126 +466,140 @@ function CourseContent() {
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 mb-6">
-                  {/* Card 2 - Primeira coluna, primeira linha */}
-                  <div className="group rounded-lg p-3 sm:p-4 border bg-card hover:border-primary/50 transition-all duration-300">
-                    <div className="flex items-center justify-between">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs sm:text-sm text-muted-foreground">
-                          Exercícios Concluídos
-                        </p>
-                        <div className="flex items-baseline gap-2 mt-1">
-                          <p className="text-lg sm:text-2xl font-bold">
-                            {completedQuestions}
-                          </p>
-                          <span className="text-xs text-green-500 truncate">
-                            {todayQuestions > 0
-                              ? `+${todayQuestions} questão${
-                                  todayQuestions > 1 ? "s" : ""
-                                } hoje`
-                              : "Nenhuma questão hoje"}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="bg-primary/10 p-2 sm:p-3 rounded-lg group-hover:bg-primary/20 transition-colors ml-2">
-                        <Brain
-                          className="h-5 w-5 sm:h-6 sm:w-6 text-primary"
-                          aria-hidden="true"
-                        />
-                      </div>
-                    </div>
-                  </div>
+                  {/* Card de Exercícios Concluídos */}
+                  <CompletedExercisesCard userId={currentUser?.id} />
 
-                  {/* Card 4 - Segunda coluna, primeira linha */}
-                  <div className="group rounded-lg p-3 sm:p-4 border bg-card hover:border-primary/50 transition-all duration-300">
-                    <div className="flex items-center justify-between">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs sm:text-sm text-muted-foreground">
-                          Conquistas
-                        </p>
-                        <div className="flex items-baseline gap-2 mt-1">
-                          <p className="text-lg sm:text-2xl font-bold">
-                            {unlockedAchievements.length}
-                          </p>
-                          {unlockedAchievements.length > 0 && (
-                            <span className="text-xs text-green-500 truncate">
-                              Desbloqueadas
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="bg-primary/10 p-2 sm:p-3 rounded-lg group-hover:bg-primary/20 transition-colors ml-2">
-                        <Trophy
-                          className="h-5 w-5 sm:h-6 sm:w-6 text-primary"
-                          aria-hidden="true"
-                        />
-                      </div>
-                    </div>
-                  </div>
+                  {/* Card de Conquistas */}
+                  <AchievementsCard userId={currentUser?.id} />
 
-                  {/* Card 1 - Primeira coluna, segunda linha */}
-                  <div className="group rounded-lg p-3 sm:p-4 border bg-card hover:border-primary/50 transition-all duration-300">
-                    <div className="flex items-center justify-between">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs sm:text-sm text-muted-foreground">
-                          Aulas Concluídas
-                        </p>
-                        <div className="flex items-baseline gap-2 mt-1">
-                          <p className="text-lg sm:text-2xl font-bold">
-                            {completedLessons.length}
-                          </p>
-                          <span className="text-xs text-green-500 truncate">
-                            {todayLessons > 0
-                              ? `+${todayLessons} aula${
-                                  todayLessons > 1 ? "s" : ""
-                                } hoje`
-                              : "Nenhuma aula hoje"}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="bg-primary/10 p-2 sm:p-3 rounded-lg group-hover:bg-primary/20 transition-colors ml-2">
+                  {/* Card de Aulas Concluídas */}
+                  <CompletedLessonsCard userId={currentUser?.id} />
+
+                  {/* Card de Horas Estudadas */}
+                  <StudyTimeCard userId={currentUser?.id} />
+                </div>
+                {/* Último Curso */}
+                <ContinueStudying />
+                {/* Próximas Atividades */}
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-base sm:text-lg font-semibold">
+                      Próximas Atividades
+                    </h3>
+                    <button
+                      type="button"
+                      className="text-xs sm:text-sm text-muted-foreground hover:text-primary transition-colors"
+                    >
+                      Ver todas
+                    </button>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="group flex flex-col sm:flex-row items-start sm:items-center gap-4 p-3 sm:p-4 rounded-lg border bg-card hover:border-primary/50 transition-all duration-300">
+                      <div className="bg-primary/10 p-2 sm:p-3 rounded-lg w-fit group-hover:bg-primary/20 transition-colors mb-3">
                         <BookOpen
-                          className="h-5 w-5 sm:h-6 sm:w-6 text-primary"
+                          className="h-5 w-5 text-primary"
                           aria-hidden="true"
                         />
                       </div>
-                    </div>
-                  </div>
-                  {/* Card 3 - Segunda coluna, segunda linha */}
-                  <div className="group rounded-lg p-3 sm:p-4 border bg-card hover:border-primary/50 transition-all duration-300">
-                    <div className="flex items-center justify-between">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs sm:text-sm text-muted-foreground">
-                          Horas Estudadas
-                        </p>
-                        <div className="flex items-baseline gap-2 mt-1">
-                          <p className="text-lg sm:text-2xl font-bold">
-                            {horasEstudadas}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-medium text-sm sm:text-base">
+                            Aula de Geografia
                           </p>
-                          <span className="text-xs text-green-500 truncate">
-                            +{tempoHoje} hoje
+                          <span className="px-2 py-0.5 text-xs bg-primary/10 text-primary rounded-full">
+                            Novo
                           </span>
                         </div>
+                        <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+                          Clima e Vegetação
+                        </p>
                       </div>
-                      <div className="bg-primary/10 p-2 sm:p-3 rounded-lg group-hover:bg-primary/20 transition-colors ml-2">
-                        <Clock
-                          className="h-5 w-5 sm:h-6 sm:w-6 text-primary"
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full sm:w-auto mt-2 sm:mt-0"
+                      >
+                        Iniciar
+                      </Button>
+                    </div>
+
+                    <div className="group flex flex-col sm:flex-row items-start sm:items-center gap-4 p-3 sm:p-4 rounded-lg border bg-card hover:border-primary/50 transition-all duration-300">
+                      <div className="bg-primary/10 p-2 sm:p-3 rounded-lg w-fit group-hover:bg-primary/20 transition-colors mb-3">
+                        <Brain
+                          className="h-5 w-5 text-primary"
                           aria-hidden="true"
                         />
                       </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-medium text-sm sm:text-base">
+                            Exercício de Matemática
+                          </p>
+                          <span className="px-2 py-0.5 text-xs border border-primary/20 text-primary rounded-full">
+                            10 questões
+                          </span>
+                        </div>
+                        <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+                          Álgebra Linear
+                        </p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full sm:w-auto mt-2 sm:mt-0"
+                      >
+                        Resolver
+                      </Button>
                     </div>
                   </div>
                 </div>
-                {/* Último Curso */}
-                <ContinueStudying
-                  lastViewedLesson={ultimaAulaVista}
-                  courseProgress={progressoCurso}
-                />
+                {/* Cards Inferiores */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                  <div className="group p-4 rounded-lg border bg-card text-card-foreground hover:border-primary/50 transition-all duration-300">
+                    <div className="bg-primary/10 p-2 sm:p-3 rounded-lg w-fit group-hover:bg-primary/20 transition-colors mb-3">
+                      <BookOpen
+                        className="h-5 w-5 text-primary"
+                        aria-hidden="true"
+                      />
+                    </div>
+                    <h4 className="font-semibold text-sm sm:text-base mb-1">
+                      Material Completo
+                    </h4>
+                    <p className="text-xs sm:text-sm text-muted-foreground">
+                      Videoaulas, textos e exercícios para fixação
+                    </p>
+                  </div>
 
-                {/* Próximas Atividades */}
-                <NextActivities
-                  nextLesson={proximaAula}
-                  lastViewedLesson={ultimaAulaVista}
-                />
+                  <div className="group p-4 rounded-lg border bg-card text-card-foreground hover:border-primary/50 transition-all duration-300">
+                    <div className="bg-primary/10 p-2 sm:p-3 rounded-lg w-fit group-hover:bg-primary/20 transition-colors mb-3">
+                      <Brain
+                        className="h-5 w-5 text-primary"
+                        aria-hidden="true"
+                      />
+                    </div>
+                    <h4 className="font-semibold text-sm sm:text-base mb-1">
+                      Exercícios Práticos
+                    </h4>
+                    <p className="text-xs sm:text-sm text-muted-foreground">
+                      Questões e simulados para testar seu conhecimento
+                    </p>
+                  </div>
+
+                  <div className="group p-4 rounded-lg border bg-card text-card-foreground hover:border-primary/50 transition-all duration-300">
+                    <div className="bg-primary/10 p-2 sm:p-3 rounded-lg w-fit group-hover:bg-primary/20 transition-colors mb-3">
+                      <Trophy
+                        className="h-5 w-5 text-primary"
+                        aria-hidden="true"
+                      />
+                    </div>
+                    <h4 className="font-semibold text-sm sm:text-base mb-1">
+                      Acompanhamento
+                    </h4>
+                    <p className="text-xs sm:text-sm text-muted-foreground">
+                      Monitore seu progresso em cada matéria
+                    </p>
+                  </div>
+                </div>
               </div>
               {/* Cards Inferiores */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
@@ -971,12 +709,10 @@ function CourseContent() {
   return (
     <div className="grid lg:grid-cols-12 h-full">
       {/* Conteúdo Principal */}
-      <div className="lg:col-span-12 h-full overflow-y-auto">
+      <div className="lg:col-span-9 2xl:col-span-10 h-full overflow-y-auto">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 px-4 md:px-6 lg:px-8">
           <div className="lg:col-start-2 lg:col-span-10 xl:col-start-3 xl:col-span-8 p-4 md:p-6 space-y-4 md:space-y-6">
-            <h1 className="text-xl md:text-2xl font-bold">
-              {currentLesson.title}
-            </h1>
+            <h1 className="text-xl md:text-2xl font-bold">{lesson.title}</h1>
 
             <div
               className="relative rounded-lg overflow-hidden bg-black w-full max-w-4xl mx-auto"
@@ -987,14 +723,16 @@ function CourseContent() {
                   <VimeoPlayer
                     videoId={vimeoId}
                     onVideoEnd={() => handleVideoEnd()}
-                    lessonId={currentLesson.id}
+                    lessonId={lesson.id}
                   />
                 ) : (
                   <PandaVideo
                     videoUrl={videoUrl}
-                    videoId={currentLesson.id}
+                    videoId={lesson.id}
                     userId={currentUser?.id}
                     onVideoEnd={() => handleVideoEnd()}
+                    width="100%"
+                    height="100%"
                   />
                 )}
                 {isChangingLesson && (
@@ -1011,38 +749,37 @@ function CourseContent() {
 
             <div className="prose max-w-none">
               <p className="text-sm md:text-base text-muted-foreground whitespace-pre-line">
-                {currentLesson.description}
+                {lesson.description}
               </p>
             </div>
 
-            {Array.isArray(currentLesson.resources) &&
-              currentLesson.resources.length > 0 && (
-                <div className="space-y-3">
-                  <h3 className="text-base md:text-lg font-semibold">
-                    Material Complementar
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-full">
-                    {currentLesson.resources.map((resource) => (
-                      <Button
-                        key={`${resource.name}-${resource.url}`}
-                        variant="outline"
-                        className="w-full justify-start h-10 md:h-12"
-                        onClick={() => window.open(resource.url, "_blank")}
-                      >
-                        <Download
-                          className="mr-2 h-3 w-3 md:h-4 md:w-4"
-                          aria-hidden="true"
-                        />
-                        <span className="text-xs md:text-sm">
-                          {resource.name}
-                        </span>
-                      </Button>
-                    ))}
-                  </div>
+            {Array.isArray(lesson.resources) && lesson.resources.length > 0 && (
+              <div className="space-y-3">
+                <h3 className="text-base md:text-lg font-semibold">
+                  Material Complementar
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-full">
+                  {lesson.resources.map((resource) => (
+                    <Button
+                      key={`${resource.name}-${resource.url}`}
+                      variant="outline"
+                      className="w-full justify-start h-10 md:h-12"
+                      onClick={() => window.open(resource.url, "_blank")}
+                    >
+                      <Download
+                        className="mr-2 h-3 w-3 md:h-4 md:w-4"
+                        aria-hidden="true"
+                      />
+                      <span className="text-xs md:text-sm">
+                        {resource.name}
+                      </span>
+                    </Button>
+                  ))}
                 </div>
-              )}
+              </div>
+            )}
 
-            {currentLesson.nextLesson && (
+            {lesson.nextLesson && (
               <div className="pt-4">
                 <Button
                   className="w-full sm:w-auto flex items-center gap-2"
@@ -1051,7 +788,7 @@ function CourseContent() {
                       "linear-gradient(90deg, #B4902A -158.27%, #F3C92C 108.81%)",
                     border: "none",
                   }}
-                  onClick={() => currentLesson.onNextLesson()}
+                  onClick={() => lesson.onNextLesson()}
                 >
                   <PlayCircle
                     className="h-3 w-3 md:h-4 md:w-4"
@@ -1063,15 +800,10 @@ function CourseContent() {
             )}
           </div>
         </div>
-        <FloatingChatButton />
       </div>
 
-      {/* Modal de Conquistas */}
-      <AchievementsModal
-        isOpen={showModal}
-        onClose={() => setShowModal(false)}
-        achievement={currentAchievement}
-      />
+      {/* Floating Chat Button */}
+      <FloatingChatButton />
     </div>
   );
 }
