@@ -300,6 +300,10 @@ CREATE TABLE IF NOT EXISTS "public"."aulas_concluidas" (
     "videoaula_id" "uuid",
     "concluido_em" timestamp with time zone
 );
+ALTER TABLE "public"."aulas_concluidas"
+ADD COLUMN IF NOT EXISTS "tempo_assistido" integer;
+
+
 
 
 ALTER TABLE "public"."aulas_concluidas" OWNER TO "supabase_admin";
@@ -531,6 +535,30 @@ CREATE TABLE IF NOT EXISTS "public"."questoes" (
     "criado_em" timestamp with time zone DEFAULT "now"(),
     "atualizado_em" timestamp with time zone DEFAULT "now"()
 );
+CREATE TABLE IF NOT EXISTS "public"."questoes_concluidas" (
+    "id" "uuid" DEFAULT "extensions"."uuid_generate_v4"() NOT NULL,
+    "usuario_id" "uuid",
+    "questao_id" "uuid",
+    "resposta_usuario" integer,
+    "esta_correta" boolean,
+    "concluido_em" timestamp with time zone DEFAULT now(),
+    CONSTRAINT "questoes_concluidas_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "questoes_concluidas_usuario_id_fkey" FOREIGN KEY ("usuario_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE,
+    CONSTRAINT "questoes_concluidas_questao_id_fkey" FOREIGN KEY ("questao_id") REFERENCES "public"."questoes"("id") ON DELETE CASCADE
+);
+
+-- Criar índices para melhor performance
+CREATE INDEX IF NOT EXISTS "questoes_concluidas_usuario_id_idx" ON "public"."questoes_concluidas" ("usuario_id");
+CREATE INDEX IF NOT EXISTS "questoes_concluidas_questao_id_idx" ON "public"."questoes_concluidas" ("questao_id");
+CREATE INDEX IF NOT EXISTS "questoes_concluidas_concluido_em_idx" ON "public"."questoes_concluidas" ("concluido_em");
+
+-- Comentários para documentação
+COMMENT ON TABLE "public"."questoes_concluidas" IS 'Tabela para rastrear as questões concluídas pelos usuários';
+COMMENT ON COLUMN "public"."questoes_concluidas"."usuario_id" IS 'ID do usuário que respondeu a questão';
+COMMENT ON COLUMN "public"."questoes_concluidas"."questao_id" IS 'ID da questão respondida';
+COMMENT ON COLUMN "public"."questoes_concluidas"."resposta_usuario" IS 'Resposta escolhida pelo usuário';
+COMMENT ON COLUMN "public"."questoes_concluidas"."esta_correta" IS 'Indica se a resposta do usuário está correta';
+COMMENT ON COLUMN "public"."questoes_concluidas"."concluido_em" IS 'Data e hora em que a questão foi respondida';
 
 
 ALTER TABLE "public"."questoes" OWNER TO "supabase_admin";
@@ -1317,7 +1345,45 @@ GRANT USAGE ON SCHEMA "public" TO "service_role";
 
 
 
+-- Tabela de conquistas
+CREATE TABLE IF NOT EXISTS "public"."conquistas" (
+    "id" "uuid" DEFAULT "extensions"."uuid_generate_v4"() NOT NULL,
+    "nome" text NOT NULL,
+    "descricao" text NOT NULL,
+    "icone" text NOT NULL,
+    "tipo" text NOT NULL,
+    "quantidade_necessaria" integer NOT NULL,
+    CONSTRAINT "conquistas_pkey" PRIMARY KEY ("id")
+);
 
+-- Tabela de conquistas dos usuários
+CREATE TABLE IF NOT EXISTS "public"."conquistas_usuarios" (
+    "id" "uuid" DEFAULT "extensions"."uuid_generate_v4"() NOT NULL,
+    "usuario_id" "uuid",
+    "conquista_id" "uuid",
+    "desbloqueado_em" timestamp with time zone DEFAULT now(),
+    CONSTRAINT "conquistas_usuarios_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "conquistas_usuarios_usuario_id_fkey" FOREIGN KEY ("usuario_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE,
+    CONSTRAINT "conquistas_usuarios_conquista_id_fkey" FOREIGN KEY ("conquista_id") REFERENCES "public"."conquistas"("id") ON DELETE CASCADE
+);
+
+-- Inserir conquistas iniciais
+INSERT INTO public.conquistas (nome, descricao, icone, tipo, quantidade_necessaria) VALUES
+-- Conquistas de aulas
+('Primeira Aula', 'Parabéns por assistir sua primeira aula!', 'graduation', 'aulas', 1),
+('Aluno Dedicado', 'Você já assistiu 10 aulas!', 'book', 'aulas', 10),
+('Mestre das Aulas', 'Incrível! Você assistiu 50 aulas!', 'trophy', 'aulas', 50),
+('Estudante Exemplar', 'Uau! Você completou 100 aulas!', 'star', 'aulas', 100),
+
+-- Conquistas de exercícios
+('Primeira Questão', 'Você respondeu sua primeira questão!', 'target', 'exercicios', 1),
+('Praticante', 'Você já respondeu 10 questões!', 'zap', 'exercicios', 10),
+('Expert', 'Impressionante! 50 questões respondidas!', 'award', 'exercicios', 50),
+('Mestre dos Exercícios', 'Fenomenal! 100 questões respondidas!', 'medal', 'exercicios', 100);
+
+-- Criar índices para melhor performance
+CREATE INDEX IF NOT EXISTS "conquistas_usuarios_usuario_id_idx" ON "public"."conquistas_usuarios" ("usuario_id");
+CREATE INDEX IF NOT EXISTS "conquistas_usuarios_conquista_id_idx" ON "public"."conquistas_usuarios" ("conquista_id");
 
 
 

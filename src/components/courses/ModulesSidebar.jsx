@@ -145,13 +145,24 @@ function ModulesSidebar({
   }, [currentUser]);
 
   const handleLessonSelect = (video, module) => {
-    onTopicSelect({
+    console.log("Selecionando aula:", {
+      video,
+      module,
+      moduleTitle: module.titulo,
+    });
+
+    const videoData = {
       ...video,
       module_titulo: module.titulo,
-    });
+      modulo_id: module.id,
+    };
+
+    onTopicSelect(videoData);
+
     if (isMobile) {
       setCollapsed(true);
     }
+
     // Atualizar a URL com os IDs do curso, módulo e vídeo
     navigate(`/courses/${course.id}/module/${module.id}/lesson/${video.id}`, {
       replace: true,
@@ -371,7 +382,15 @@ function ModulesSidebar({
 
       {/* Practice Modal */}
       {showPractice && (
-        <PracticeModal onClose={() => setShowPractice(false)} course={course} />
+        <PracticeModal
+          onClose={() => setShowPractice(false)}
+          course={course}
+          onQuestionComplete={() => {
+            // Disparar um evento personalizado para notificar o CourseContent
+            const event = new CustomEvent("questionCompleted");
+            window.dispatchEvent(event);
+          }}
+        />
       )}
     </>
   );

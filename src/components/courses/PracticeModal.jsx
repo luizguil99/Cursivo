@@ -18,8 +18,11 @@ import {
 import { supabase } from "@/lib/supabase";
 import AIChat from "./AIChat";
 import confetti from "canvas-confetti";
+import { useAuth } from "@/contexts/AuthContext";
+import { useAchievements } from "@/hooks/useAchievements";
+import { AchievementsModal } from "@/components/achievements/AchievementsModal";
 
-function PracticeModal({ course, topic, onClose }) {
+function PracticeModal({ course, topic, onClose, onQuestionComplete }) {
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
   const [score, setScore] = useState(0);
@@ -30,6 +33,13 @@ function PracticeModal({ course, topic, onClose }) {
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [strickenOptions, setStrickenOptions] = useState({});
+  const { currentUser } = useAuth();
+  const { 
+    showModal, 
+    currentAchievement, 
+    setShowModal,
+    checkNewAchievements 
+  } = useAchievements(currentUser?.id);
 
   const toggleStrike = (questionId, optionIndex) => {
     setStrickenOptions((prev) => ({
@@ -141,16 +151,39 @@ function PracticeModal({ course, topic, onClose }) {
     );
   }
 
-  const handleAnswer = (index) => {
+  const handleAnswer = async (index) => {
     setSelectedAnswer(index);
-    if (index === filteredQuestions[currentQuestion].correctAnswer) {
+    const isCorrect = index === filteredQuestions[currentQuestion].correctAnswer;
+
+    if (isCorrect) {
       setScore((prev) => prev + 1);
       confetti({
         particleCount: 100,
         spread: 70,
         origin: { y: 0.6 },
-        colors: ["#FFD700", "#FFA500", "#FF6347"], // Cores dourado, laranja e vermelho-tomate
+        colors: ["#FFD700", "#FFA500", "#FF6347"],
       });
+    }
+
+    try {
+      // Salvar a questão concluída no banco de dados
+      const { error } = await supabase
+        .from("questoes_concluidas")
+        .insert({
+          usuario_id: (await supabase.auth.getUser()).data.user.id,
+          questao_id: filteredQuestions[currentQuestion].id,
+          resposta_usuario: index,
+          esta_correta: isCorrect,
+        });
+
+      if (error) throw error;
+
+      // Notificar o componente pai para atualizar o card
+      if (onQuestionComplete) {
+        onQuestionComplete();
+      }
+    } catch (error) {
+      console.error("Erro ao salvar questão concluída:", error);
     }
   };
 
@@ -171,6 +204,53 @@ function PracticeModal({ course, topic, onClose }) {
   };
 
   const currentQuestionData = filteredQuestions[currentQuestion];
+
+  const handleAnswerSubmit = async () => {
+    if (selectedAnswer === null) return;
+
+    const currentQ = questions[currentQuestion];
+    const isCorrect = selectedAnswer === currentQ.resposta_correta;
+
+    try {
+      // Registrar resposta no banco de dados
+      const { error } = await supabase.from("questoes_concluidas").insert({
+        usuario_id: currentUser.id,
+        questao_id: currentQ.id,
+        resposta_usuario: selectedAnswer,
+        esta_correta: isCorrect,
+      });
+
+      if (error) throw error;
+
+      // Verificar novas conquistas após responder
+      await checkNewAchievements();
+
+      // Chamar callback
+      if (onQuestionComplete) {
+        onQuestionComplete(isCorrect);
+      }
+
+      if (isCorrect) {
+        setScore((prev) => prev + 1);
+        confetti({
+          particleCount: 100,
+          spread: 70,
+          origin: { y: 0.6 },
+        });
+      }
+
+      // Se houver mais questões, continuar
+      if (currentQuestion < questions.length - 1) {
+        setTimeout(() => {
+          setCurrentQuestion((prev) => prev + 1);
+          setSelectedAnswer(null);
+          setShowSolution(false);
+        }, 1500);
+      }
+    } catch (error) {
+      console.error("Erro ao registrar resposta:", error);
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -374,6 +454,12 @@ function PracticeModal({ course, topic, onClose }) {
           </div>
         </div>
       </div>
+      {/* Modal de Conquistas */}
+      <AchievementsModal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        achievement={currentAchievement}
+      />
     </div>
   );
 }

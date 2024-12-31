@@ -98,14 +98,18 @@ function Courses() {
   const handleLessonSelect = (lesson) => {
     console.log("Aula selecionada:", lesson);
     // Formatando os dados da lição para o formato esperado pelo CourseContent
-    setSelectedLesson({
+    const formattedLesson = {
       id: lesson.id,
-      title: lesson.titulo,
-      description: lesson.descricao,
-      videoUrl: lesson.url_video,
-      resources: lesson.recursos || [],
+      title: lesson.titulo || lesson.title,
+      description: lesson.descricao || lesson.description,
+      videoUrl: lesson.url_video || lesson.videoUrl,
+      modulo_id: lesson.modulo_id,
+      module_titulo: lesson.module_titulo,
+      resources: lesson.recursos || lesson.resources || [],
       ...lesson,
-    });
+    };
+    console.log("Aula formatada:", formattedLesson);
+    setSelectedLesson(formattedLesson);
     setShowSchedule(false);
   };
 
