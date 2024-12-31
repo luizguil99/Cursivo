@@ -553,53 +553,6 @@ function CourseContent({ lesson, onVideoEnd, updateSidebarCompletion }) {
                     </div>
                   </div>
                 </div>
-                {/* Cards Inferiores */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                  <div className="group p-4 rounded-lg border bg-card text-card-foreground hover:border-primary/50 transition-all duration-300">
-                    <div className="bg-primary/10 p-2 sm:p-3 rounded-lg w-fit group-hover:bg-primary/20 transition-colors mb-3">
-                      <BookOpen
-                        className="h-5 w-5 text-primary"
-                        aria-hidden="true"
-                      />
-                    </div>
-                    <h4 className="font-semibold text-sm sm:text-base mb-1">
-                      Material Completo
-                    </h4>
-                    <p className="text-xs sm:text-sm text-muted-foreground">
-                      Videoaulas, textos e exercícios para fixação
-                    </p>
-                  </div>
-
-                  <div className="group p-4 rounded-lg border bg-card text-card-foreground hover:border-primary/50 transition-all duration-300">
-                    <div className="bg-primary/10 p-2 sm:p-3 rounded-lg w-fit group-hover:bg-primary/20 transition-colors mb-3">
-                      <Brain
-                        className="h-5 w-5 text-primary"
-                        aria-hidden="true"
-                      />
-                    </div>
-                    <h4 className="font-semibold text-sm sm:text-base mb-1">
-                      Exercícios Práticos
-                    </h4>
-                    <p className="text-xs sm:text-sm text-muted-foreground">
-                      Questões e simulados para testar seu conhecimento
-                    </p>
-                  </div>
-
-                  <div className="group p-4 rounded-lg border bg-card text-card-foreground hover:border-primary/50 transition-all duration-300">
-                    <div className="bg-primary/10 p-2 sm:p-3 rounded-lg w-fit group-hover:bg-primary/20 transition-colors mb-3">
-                      <Trophy
-                        className="h-5 w-5 text-primary"
-                        aria-hidden="true"
-                      />
-                    </div>
-                    <h4 className="font-semibold text-sm sm:text-base mb-1">
-                      Acompanhamento
-                    </h4>
-                    <p className="text-xs sm:text-sm text-muted-foreground">
-                      Monitore seu progresso em cada matéria
-                    </p>
-                  </div>
-                </div>
               </div>
               {/* Cards Inferiores */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
