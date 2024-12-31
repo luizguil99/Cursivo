@@ -1,10 +1,10 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { BookOpen, Brain } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useNavigate } from "react-router-dom";
 import PracticeModal from "./PracticeModal";
 
-export function NextActivities({ nextLesson, lastViewedLesson }) {
+export function NextActivities({ nextLesson }) {
   const navigate = useNavigate();
   const [showPracticeModal, setShowPracticeModal] = useState(false);
 
@@ -20,9 +20,6 @@ export function NextActivities({ nextLesson, lastViewedLesson }) {
   const handlePracticeComplete = () => {
     setShowPracticeModal(false);
   };
-
-  // Pegar o nome do curso do continue estudando
-  const courseName = lastViewedLesson?.videoaulas?.modulos?.cursos?.titulo;
 
   return (
     <div>
@@ -47,9 +44,11 @@ export function NextActivities({ nextLesson, lastViewedLesson }) {
               <p className="font-medium text-sm sm:text-base">
                 {nextLesson?.titulo || "Nenhuma próxima aula disponível"}
               </p>
-              <span className="px-2 py-0.5 text-xs bg-primary/10 text-primary rounded-full">
-                Próxima
-              </span>
+              {nextLesson && (
+                <span className="px-2 py-0.5 text-xs bg-primary/10 text-primary rounded-full">
+                  Novo
+                </span>
+              )}
             </div>
             <p className="text-xs sm:text-sm text-muted-foreground mt-1">
               {nextLesson?.modulos?.titulo || ""}
@@ -60,7 +59,7 @@ export function NextActivities({ nextLesson, lastViewedLesson }) {
             size="sm"
             className="w-full sm:w-auto mt-2 sm:mt-0"
             onClick={navigateToNextLesson}
-            disabled={!nextLesson?.modulos?.curso_id}
+            disabled={!nextLesson}
           >
             Iniciar
           </Button>
@@ -73,19 +72,21 @@ export function NextActivities({ nextLesson, lastViewedLesson }) {
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <p className="font-medium text-sm sm:text-base">
-                Questões de {courseName || ""}
+                Exercício de Matemática
               </p>
               <span className="px-2 py-0.5 text-xs border border-primary/20 text-primary rounded-full">
-                5 questões
+                10 questões
               </span>
             </div>
             <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-              Pratique o que aprendeu
+              Álgebra Linear
             </p>
           </div>
           <Button
             onClick={() => setShowPracticeModal(true)}
-            className="bg-[#F3C92C] hover:bg-[#F3C92C]/80 text-background shadow-lg shadow-[#F3C92C]/20 w-full sm:w-auto"
+            variant="outline"
+            size="sm"
+            className="w-full sm:w-auto mt-2 sm:mt-0"
           >
             Resolver
           </Button>
@@ -94,7 +95,7 @@ export function NextActivities({ nextLesson, lastViewedLesson }) {
 
       {showPracticeModal && (
         <PracticeModal
-          course={courseName}
+          course={nextLesson?.modulos?.cursos?.titulo}
           topic={nextLesson?.titulo}
           onClose={() => setShowPracticeModal(false)}
           onQuestionComplete={handlePracticeComplete}

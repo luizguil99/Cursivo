@@ -5,13 +5,13 @@ import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { BookOpen } from "lucide-react";
 
-export function ContinueStudying() {
+export function ContinueStudying({ proximaAulaCallback }) {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
   const [ultimaAulaVista, setUltimaAulaVista] = useState(null);
   const [progressoCurso, setProgressoCurso] = useState({
     porcentagem: 0,
-    aulasRestantes: 0
+    aulasRestantes: 0,
   });
   const [proximaAula, setProximaAula] = useState(null);
 
@@ -23,7 +23,8 @@ export function ContinueStudying() {
       console.log("=== BUSCANDO ÚLTIMA AULA VISTA ===");
       const { data, error } = await supabase
         .from("aulas_concluidas")
-        .select(`
+        .select(
+          `
           videoaula_id,
           concluido_em,
           videoaulas (
@@ -40,7 +41,8 @@ export function ContinueStudying() {
               )
             )
           )
-        `)
+        `
+        )
         .eq("usuario_id", currentUser.id)
         .order("concluido_em", { ascending: false })
         .limit(1);
@@ -64,12 +66,15 @@ export function ContinueStudying() {
   // Atualizar última aula quando uma aula for concluída
   useEffect(() => {
     const handleLessonCompleted = () => {
-      console.log("Evento lessonCompleted recebido, atualizando última aula...");
+      console.log(
+        "Evento lessonCompleted recebido, atualizando última aula..."
+      );
       fetchUltimaAulaVista();
     };
 
     window.addEventListener("lessonCompleted", handleLessonCompleted);
-    return () => window.removeEventListener("lessonCompleted", handleLessonCompleted);
+    return () =>
+      window.removeEventListener("lessonCompleted", handleLessonCompleted);
   }, []);
 
   // Função para calcular o progresso do curso
@@ -78,7 +83,7 @@ export function ContinueStudying() {
 
     try {
       console.log("=== CALCULANDO PROGRESSO DO CURSO ===", cursoId);
-      
+
       // Buscar total de aulas do curso
       const { data: totalAulas, error: errorTotal } = await supabase
         .from("videoaulas")
@@ -90,7 +95,9 @@ export function ContinueStudying() {
       // Buscar aulas concluídas do usuário neste curso
       const { data: aulasCompletas, error: errorCompletas } = await supabase
         .from("aulas_concluidas")
-        .select("videoaula_id, videoaulas!inner(modulo_id, modulos!inner(curso_id))")
+        .select(
+          "videoaula_id, videoaulas!inner(modulo_id, modulos!inner(curso_id))"
+        )
         .eq("usuario_id", currentUser.id)
         .eq("videoaulas.modulos.curso_id", cursoId);
 
@@ -106,12 +113,12 @@ export function ContinueStudying() {
         total,
         completas,
         restantes,
-        porcentagem
+        porcentagem,
       });
 
       setProgressoCurso({
         porcentagem,
-        aulasRestantes: restantes
+        aulasRestantes: restantes,
       });
     } catch (error) {
       console.error("Erro ao calcular progresso:", error);
@@ -136,51 +143,97 @@ export function ContinueStudying() {
     };
 
     window.addEventListener("lessonCompleted", handleLessonCompleted);
-    return () => window.removeEventListener("lessonCompleted", handleLessonCompleted);
+    return () =>
+      window.removeEventListener("lessonCompleted", handleLessonCompleted);
   }, [ultimaAulaVista]);
 
   // Função para buscar a próxima aula
   const buscarProximaAula = async () => {
-    if (!currentUser?.id || !ultimaAulaVista?.videoaulas?.modulos?.curso_id) return;
+    if (!currentUser?.id || !ultimaAulaVista?.videoaulas?.modulos?.curso_id)
+      return;
 
     try {
       console.log("=== BUSCANDO PRÓXIMA AULA ===");
       const cursoId = ultimaAulaVista.videoaulas.modulos.curso_id;
+      console.log("Curso ID:", cursoId);
+      console.log("Última aula vista:", ultimaAulaVista.videoaulas);
 
-      // Buscar todas as videoaulas do curso em ordem
-      const { data: aulas, error: errorAulas } = await supabase
-        .from("videoaulas")
-        .select(`
-          id, 
-          titulo, 
-          ordem_indice,
-          modulo_id,
-          modulos!inner (
-            id,
-            titulo,
-            ordem_indice,
-            curso_id
-          )
-        `)
-        .eq("modulos.curso_id", cursoId)
-        .order("modulos.ordem_indice", { ascending: true })
+      // Buscar módulos do curso
+      const { data: modulos, error: modulesError } = await supabase
+        .from("modulos")
+        .select("*")
+        .eq("curso_id", cursoId)
         .order("ordem_indice", { ascending: true });
 
-      if (errorAulas) throw errorAulas;
+      if (modulesError) throw modulesError;
 
-      // Buscar aulas concluídas
-      const { data: aulasCompletas, error: errorCompletas } = await supabase
-        .from("aulas_concluidas")
-        .select("videoaula_id")
-        .eq("usuario_id", currentUser.id);
+      console.log("Módulos encontrados:", modulos);
 
-      if (errorCompletas) throw errorCompletas;
+      // Buscar vídeos do curso
+      const { data: videos, error: videosError } = await supabase
+        .from("videoaulas")
+        .select("*")
+        .in(
+          "modulo_id",
+          modulos.map((m) => m.id)
+        )
+        .order("ordem_indice", { ascending: true });
 
-      const aulasCompletasIds = aulasCompletas.map(a => a.videoaula_id);
-      const proximaAula = aulas.find(aula => !aulasCompletasIds.includes(aula.id));
+      if (videosError) throw videosError;
 
-      console.log("Próxima aula encontrada:", proximaAula);
-      setProximaAula(proximaAula);
+      console.log("Vídeos encontrados:", videos);
+
+      // Organizar vídeos por módulo e ordenar por ordem
+      const videosByModule = modulos.reduce((acc, module) => {
+        acc[module.id] = videos
+          .filter((video) => video.modulo_id === module.id)
+          .sort((a, b) => (a.ordem_indice || 0) - (b.ordem_indice || 0));
+        return acc;
+      }, {});
+
+      console.log("Vídeos organizados por módulo:", videosByModule);
+
+      // Encontrar a próxima aula
+      let encontrouUltimaAula = false;
+      let proximaAulaEncontrada = null;
+
+      // Iterar pelos módulos em ordem
+      for (const modulo of modulos) {
+        const videosDoModulo = videosByModule[modulo.id] || [];
+        console.log(`Verificando módulo ${modulo.titulo}:`, videosDoModulo);
+
+        for (const video of videosDoModulo) {
+          if (encontrouUltimaAula) {
+            proximaAulaEncontrada = {
+              ...video,
+              modulos: modulo, // Adicionar informações do módulo
+            };
+            break;
+          }
+
+          if (video.id === ultimaAulaVista.videoaulas.id) {
+            console.log("Encontrou última aula vista:", video.titulo);
+            encontrouUltimaAula = true;
+          }
+        }
+
+        if (proximaAulaEncontrada) break;
+      }
+
+      console.log(
+        "Próxima aula encontrada:",
+        proximaAulaEncontrada
+          ? {
+              id: proximaAulaEncontrada.id,
+              titulo: proximaAulaEncontrada.titulo,
+              modulo: proximaAulaEncontrada.modulos.titulo,
+              ordem_modulo: proximaAulaEncontrada.modulos.ordem_indice,
+              ordem_aula: proximaAulaEncontrada.ordem_indice,
+            }
+          : "Nenhuma próxima aula disponível"
+      );
+
+      setProximaAula(proximaAulaEncontrada);
     } catch (error) {
       console.error("Erro ao buscar próxima aula:", error);
     }
@@ -190,6 +243,13 @@ export function ContinueStudying() {
   useEffect(() => {
     buscarProximaAula();
   }, [ultimaAulaVista, currentUser?.id]);
+
+  // Atualizar próxima aula quando encontrada
+  useEffect(() => {
+    if (proximaAula) {
+      proximaAulaCallback?.(proximaAula);
+    }
+  }, [proximaAula]);
 
   return (
     <div className="rounded-lg p-4 sm:p-6 mb-6 border bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -211,10 +271,10 @@ export function ContinueStudying() {
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-2 mb-1">
             <h4 className="font-medium text-sm sm:text-base">
-              {proximaAula?.titulo || ultimaAulaVista?.videoaulas?.titulo || "Carregando..."}
+              {ultimaAulaVista?.videoaulas?.titulo || "Carregando..."}
             </h4>
             <span className="px-2 py-0.5 text-xs bg-muted rounded-full">
-              {proximaAula?.modulos?.titulo || ultimaAulaVista?.videoaulas?.modulos?.titulo || ""}
+              {ultimaAulaVista?.videoaulas?.modulos?.titulo || ""}
             </span>
           </div>
           <p className="text-xs sm:text-sm text-muted-foreground mb-2">
@@ -227,12 +287,13 @@ export function ContinueStudying() {
             ></div>
           </div>
           <p className="text-xs text-muted-foreground mt-2">
-            {progressoCurso.porcentagem}% concluído • {progressoCurso.aulasRestantes} aulas restantes
+            {progressoCurso.porcentagem}% concluído •{" "}
+            {progressoCurso.aulasRestantes} aulas restantes
           </p>
         </div>
         <Button
           onClick={() => {
-            const aula = proximaAula || ultimaAulaVista?.videoaulas;
+            const aula = ultimaAulaVista?.videoaulas;
             if (aula) {
               const url = `/courses/${aula.modulos.curso_id}/module/${aula.modulo_id}/lesson/${aula.id}`;
               console.log("Navegando para:", url);
