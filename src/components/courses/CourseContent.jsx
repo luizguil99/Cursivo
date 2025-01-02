@@ -7,20 +7,312 @@ import {
   Brain,
   Trophy,
   Clock,
+  ArrowRight,
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import FloatingChatButton from "./FloatingChatButton";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
 import VimeoPlayer from "./VimeoPlayer";
+import PandaVideo from "@/components/ui/panda-video";
+import DailyEvents from "@/components/community/DailyEvents";
+import {
+  getNotificationsFromCache,
+  setNotificationsCache,
+  invalidateNotificationsCache,
+} from "@/lib/notificationsCache";
+import { CompletedExercisesCard } from "./CompletedExercisesCard";
+import { CompletedLessonsCard } from "./CompletedLessonsCard";
+import { AchievementsCard } from "./AchievementsCard";
+import { StudyTimeCard } from "./StudyTimeCard";
+import { ContinueStudying } from "./ContinueStudying";
+import { NextActivities } from "./NextActivities";
 
-function CourseContent({ lesson, onLessonComplete }) {
+function CourseContent({
+  lesson,
+  onVideoEnd,
+  updateSidebarCompletion,
+  handleCoursesClick,
+  onScheduleClick,
+}) {
   const navigate = useNavigate();
   const location = useLocation();
   const { currentUser } = useAuth();
-  const [isCompleted, setIsCompleted] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [currentVideoId, setCurrentVideoId] = useState(null);
+  const [isChangingLesson, setIsChangingLesson] = useState(false);
+  const [notifications, setNotifications] = useState(
+    () => getNotificationsFromCache() || []
+  );
+  const [ultimaAulaVista, setUltimaAulaVista] = useState(null);
+  const [progressoCurso, setProgressoCurso] = useState({
+    porcentagem: 0,
+    aulasRestantes: 0,
+  });
+  const [proximaAula, setProximaAula] = useState(null);
+  const [showCourses, setShowCourses] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
+
+  // Buscar notificações do Supabase
+  useEffect(() => {
+    const fetchNotifications = async () => {
+      // Verificar cache
+      const cachedData = getNotificationsFromCache();
+      if (cachedData) {
+        setNotifications(cachedData);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from("notificacoes")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(3);
+
+        if (error) throw error;
+
+        // Atualizar cache global
+        setNotificationsCache(data || []);
+        setNotifications(data || []);
+      } catch (error) {
+        console.error("Erro ao buscar notificações:", error);
+      }
+    };
+
+    fetchNotifications();
+
+    // Configurar subscription para atualizações em tempo real
+    const subscription = supabase
+      .channel("notificacoes_changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "notificacoes",
+        },
+        () => {
+          // Força atualização do cache quando receber nova notificação
+          invalidateNotificationsCache();
+          fetchNotifications();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  // Buscar última aula vista
+  const fetchUltimaAulaVista = async () => {
+    if (!currentUser?.id) return;
+
+    try {
+      console.log("=== BUSCANDO ÚLTIMA AULA VISTA ===");
+      const { data, error } = await supabase
+        .from("aulas_concluidas")
+        .select(
+          `
+          videoaula_id,
+          concluido_em,
+          videoaulas (
+            id,
+            titulo,
+            modulo_id,
+            modulos (
+              id,
+              titulo,
+              curso_id,
+              cursos (
+                id,
+                titulo
+              )
+            )
+          )
+        `
+        )
+        .eq("usuario_id", currentUser.id)
+        .order("concluido_em", { ascending: false })
+        .limit(1);
+
+      if (error) throw error;
+
+      console.log("Última aula vista:", data?.[0]);
+      if (data && data.length > 0) {
+        setUltimaAulaVista(data[0]);
+      }
+    } catch (error) {
+      console.error("Erro ao buscar última aula vista:", error);
+    }
+  };
+
+  // Buscar última aula vista quando o usuário mudar
+  useEffect(() => {
+    fetchUltimaAulaVista();
+  }, [currentUser?.id]);
+
+  // Atualizar última aula quando uma aula for concluída
+  useEffect(() => {
+    const handleLessonCompleted = () => {
+      console.log(
+        "Evento lessonCompleted recebido, atualizando última aula..."
+      );
+      fetchUltimaAulaVista();
+    };
+
+    window.addEventListener("lessonCompleted", handleLessonCompleted);
+    return () =>
+      window.removeEventListener("lessonCompleted", handleLessonCompleted);
+  }, []);
+
+  // Função para calcular o progresso do curso
+  const calcularProgressoCurso = async (cursoId) => {
+    if (!currentUser?.id || !cursoId) return;
+
+    try {
+      console.log("=== CALCULANDO PROGRESSO DO CURSO ===", cursoId);
+
+      // Buscar total de aulas do curso
+      const { data: totalAulas, error: errorTotal } = await supabase
+        .from("videoaulas")
+        .select("id, modulo_id, modulos!inner (curso_id)")
+        .eq("modulos.curso_id", cursoId);
+
+      if (errorTotal) throw errorTotal;
+
+      // Buscar aulas concluídas do usuário neste curso
+      const { data: aulasCompletas, error: errorCompletas } = await supabase
+        .from("aulas_concluidas")
+        .select(
+          "videoaula_id, videoaulas!inner(modulo_id, modulos!inner(curso_id))"
+        )
+        .eq("usuario_id", currentUser.id)
+        .eq("videoaulas.modulos.curso_id", cursoId);
+
+      if (errorCompletas) throw errorCompletas;
+
+      // Calcular progresso
+      const total = totalAulas?.length || 0;
+      const completas = aulasCompletas?.length || 0;
+      const restantes = total - completas;
+      const porcentagem = total > 0 ? Math.round((completas / total) * 100) : 0;
+
+      console.log("Progresso calculado:", {
+        total,
+        completas,
+        restantes,
+        porcentagem,
+      });
+
+      setProgressoCurso({
+        porcentagem,
+        aulasRestantes: restantes,
+      });
+    } catch (error) {
+      console.error("Erro ao calcular progresso:", error);
+      setProgressoCurso({ porcentagem: 0, aulasRestantes: 0 });
+    }
+  };
+
+  // Atualizar progresso quando o curso mudar
+  useEffect(() => {
+    if (ultimaAulaVista?.videoaulas?.modulos?.curso_id) {
+      calcularProgressoCurso(ultimaAulaVista.videoaulas.modulos.curso_id);
+    }
+  }, [ultimaAulaVista, currentUser?.id]);
+
+  // Atualizar progresso quando uma aula for concluída
+  useEffect(() => {
+    const handleLessonCompleted = () => {
+      console.log("Evento lessonCompleted recebido, atualizando progresso...");
+      if (ultimaAulaVista?.videoaulas?.modulos?.curso_id) {
+        calcularProgressoCurso(ultimaAulaVista.videoaulas.modulos.curso_id);
+      }
+    };
+
+    window.addEventListener("lessonCompleted", handleLessonCompleted);
+    return () =>
+      window.removeEventListener("lessonCompleted", handleLessonCompleted);
+  }, [ultimaAulaVista]);
+
+  // Função para buscar a próxima aula
+  const buscarProximaAula = async () => {
+    if (!currentUser?.id || !ultimaAulaVista?.videoaulas?.modulos?.curso_id)
+      return;
+
+    try {
+      console.log("=== BUSCANDO PRÓXIMA AULA ===");
+      const cursoId = ultimaAulaVista.videoaulas.modulos.curso_id;
+
+      // Buscar todas as videoaulas do curso em ordem
+      const { data: aulas, error: errorAulas } = await supabase
+        .from("videoaulas")
+        .select(
+          `
+          id, 
+          titulo, 
+          ordem_indice,
+          modulo_id,
+          modulos!inner (
+            id,
+            titulo,
+            ordem_indice,
+            curso_id
+          )
+        `
+        )
+        .eq("modulos.curso_id", cursoId)
+        .order("modulos.ordem_indice", { ascending: true })
+        .order("ordem_indice", { ascending: true });
+
+      if (errorAulas) throw errorAulas;
+
+      // Buscar aulas concluídas
+      const { data: aulasCompletas, error: errorCompletas } = await supabase
+        .from("aulas_concluidas")
+        .select("videoaula_id")
+        .eq("usuario_id", currentUser.id);
+
+      if (errorCompletas) throw errorCompletas;
+
+      const aulasCompletasIds = aulasCompletas.map((a) => a.videoaula_id);
+      const proximaAula = aulas.find(
+        (aula) => !aulasCompletasIds.includes(aula.id)
+      );
+
+      console.log("Próxima aula encontrada:", proximaAula);
+      setProximaAula(proximaAula);
+    } catch (error) {
+      console.error("Erro ao buscar próxima aula:", error);
+    }
+  };
+
+  // Buscar próxima aula quando a última aula vista mudar
+  useEffect(() => {
+    buscarProximaAula();
+  }, [ultimaAulaVista, currentUser?.id]);
+
+  // Função para formatar o tempo relativo
+  const formatRelativeTime = (dateString) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInSeconds = Math.floor((now - date) / 1000);
+
+    if (diffInSeconds < 60) {
+      return "Agora mesmo";
+    } else if (diffInSeconds < 3600) {
+      const minutes = Math.floor(diffInSeconds / 60);
+      return `Há ${minutes} ${minutes === 1 ? "minuto" : "minutos"}`;
+    } else if (diffInSeconds < 86400) {
+      const hours = Math.floor(diffInSeconds / 3600);
+      return `Há ${hours} ${hours === 1 ? "hora" : "horas"}`;
+    } else {
+      const days = Math.floor(diffInSeconds / 86400);
+      return `Há ${days} ${days === 1 ? "dia" : "dias"}`;
+    }
+  };
 
   // Debug do usuário
   useEffect(() => {
@@ -39,10 +331,9 @@ function CourseContent({ lesson, onLessonComplete }) {
   useEffect(() => {
     if (lesson?.id !== currentVideoId) {
       setIsLoading(true);
-      setIsCompleted(false);
       setCurrentVideoId(lesson?.id);
     }
-  }, [lesson?.id]);
+  }, [lesson?.id, currentVideoId]);
 
   // Verifica se a aula já foi concluída
   useEffect(() => {
@@ -62,11 +353,9 @@ function CourseContent({ lesson, onLessonComplete }) {
           return;
         }
 
-        setIsCompleted(!!data);
+        setIsLoading(false);
       } catch (error) {
         console.error("Erro ao verificar conclusão:", error);
-      } finally {
-        setIsLoading(false);
       }
     };
 
@@ -75,352 +364,29 @@ function CourseContent({ lesson, onLessonComplete }) {
     }
   }, [currentUser?.id, lesson?.id, currentVideoId]);
 
+  // Função para lidar com o fim do vídeo
   const handleVideoEnd = useCallback(async () => {
     if (!currentUser?.id || !lesson?.id) {
       console.log("Usuário não logado ou aula não encontrada");
       return;
     }
 
-    try {
-      // Primeiro, verifica se já existe um registro
-      const { data: existingData, error: checkError } = await supabase
-        .from("aulas_concluidas")
-        .select("*")
-        .eq("usuario_id", currentUser.id)
-        .eq("videoaula_id", lesson.id)
-        .single();
+    // Ativar loading
+    setIsChangingLesson(true);
 
-      if (checkError && checkError.code !== "PGRST116") {
-        console.error("Erro ao verificar aula concluída:", checkError);
-        return;
-      }
-
-      // Se já existe um registro, não precisa fazer nada
-      if (existingData) {
-        console.log("Aula já foi concluída anteriormente");
-        setIsCompleted(true);
-        return;
-      }
-
-      // Se não existe, insere um novo registro
-      console.log("Salvando nova conclusão de aula");
-      const { error: insertError } = await supabase
-        .from("aulas_concluidas")
-        .insert({
-          usuario_id: currentUser.id,
-          videoaula_id: lesson.id,
-          concluido_em: new Date().toISOString(),
-        });
-
-      if (insertError) {
-        console.error("Erro ao salvar progresso:", insertError);
-        return;
-      }
-
-      console.log("Progresso salvo com sucesso!");
-      setIsCompleted(true);
-
-      // Notificar o componente pai que a aula foi concluída
-      if (onLessonComplete) {
-        console.log("Notificando componente pai sobre conclusão");
-        onLessonComplete(lesson.id);
-      }
-    } catch (error) {
-      console.error("Erro ao salvar progresso:", error);
+    // Atualizar a bolinha na sidebar imediatamente
+    if (updateSidebarCompletion) {
+      updateSidebarCompletion(lesson.id, true);
     }
-  }, [currentUser?.id, lesson?.id, onLessonComplete]);
 
-  // Se não houver lição ou se showExplore for true, mostra a página de exploração
-  if (!lesson || location.state?.showExplore) {
-    return (
-      <div className="h-full overflow-y-auto bg-background">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
-          <div className="flex flex-col lg:flex-row gap-4 sm:gap-6">
-            {/* Coluna Principal */}
-            <div className="flex-1 space-y-4 sm:space-y-6">
-              <div className="rounded-lg p-4 sm:p-6 border bg-card text-card-foreground shadow-sm">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
-                  <div>
-                    <h1 className="text-xl sm:text-2xl font-bold mb-2 text-[#F3C92C]">
-                      Bem-vindo de volta!
-                    </h1>
-                    <p className="text-sm sm:text-base text-muted-foreground">
-                      Continue sua jornada de aprendizado
-                    </p>
-                  </div>
-                  <div className="sm:block">
-                    <span className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs sm:text-sm font-medium text-primary ring-1 ring-inset ring-primary/20">
-                      Nível Atual: Intermediário
-                    </span>
-                  </div>
-                </div>
+    // Chamar onVideoEnd imediatamente para uma experiência mais responsiva
+    if (onVideoEnd) onVideoEnd();
+  }, [currentUser?.id, lesson?.id, onVideoEnd, updateSidebarCompletion]);
 
-                {/* Cards de Estatísticas */}
-                <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
-                  {/* Card 1 */}
-                  <div className="group rounded-lg p-3 sm:p-4 border bg-card hover:border-primary/50 transition-all duration-300">
-                    <div className="flex items-center justify-between">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs sm:text-sm text-muted-foreground truncate">
-                          Cursos em Andamento
-                        </p>
-                        <div className="flex items-baseline gap-2 mt-1">
-                          <p className="text-lg sm:text-2xl font-bold">4</p>
-                          <span className="text-xs text-green-500 truncate">+2 nesta semana</span>
-                        </div>
-                      </div>
-                      <div className="bg-primary/10 p-2 sm:p-3 rounded-lg group-hover:bg-primary/20 transition-colors ml-2">
-                        <BookOpen className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Card 2 */}
-                  <div className="group rounded-lg p-3 sm:p-4 border bg-card hover:border-primary/50 transition-all duration-300">
-                    <div className="flex items-center justify-between">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs sm:text-sm text-muted-foreground truncate">
-                          Exercícios Concluídos
-                        </p>
-                        <div className="flex items-baseline gap-2 mt-1">
-                          <p className="text-lg sm:text-2xl font-bold">28</p>
-                          <span className="text-xs text-green-500 truncate">+5 hoje</span>
-                        </div>
-                      </div>
-                      <div className="bg-primary/10 p-2 sm:p-3 rounded-lg group-hover:bg-primary/20 transition-colors ml-2">
-                        <Brain className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Card 3 */}
-                  <div className="group rounded-lg p-3 sm:p-4 border bg-card hover:border-primary/50 transition-all duration-300">
-                    <div className="flex items-center justify-between">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs sm:text-sm text-muted-foreground truncate">
-                          Horas Estudadas
-                        </p>
-                        <div className="flex items-baseline gap-2 mt-1">
-                          <p className="text-lg sm:text-2xl font-bold">12h</p>
-                          <span className="text-xs text-green-500 truncate">+3h hoje</span>
-                        </div>
-                      </div>
-                      <div className="bg-primary/10 p-2 sm:p-3 rounded-lg group-hover:bg-primary/20 transition-colors ml-2">
-                        <Clock className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Card 4 */}
-                  <div className="group rounded-lg p-3 sm:p-4 border bg-card hover:border-primary/50 transition-all duration-300">
-                    <div className="flex items-center justify-between">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs sm:text-sm text-muted-foreground truncate">
-                          Conquistas
-                        </p>
-                        <div className="flex items-baseline gap-2 mt-1">
-                          <p className="text-lg sm:text-2xl font-bold">5</p>
-                          <span className="text-xs text-green-500 truncate">Nova!</span>
-                        </div>
-                      </div>
-                      <div className="bg-primary/10 p-2 sm:p-3 rounded-lg group-hover:bg-primary/20 transition-colors ml-2">
-                        <Trophy className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Último Curso */}
-                <div className="rounded-lg p-4 sm:p-6 mb-6 border bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-2">
-                    <h3 className="text-base sm:text-lg font-semibold">Continue Estudando</h3>
-                    <span className="px-2 py-1 text-xs font-medium bg-primary/10 text-primary rounded-full w-fit">
-                      Última atividade
-                    </span>
-                  </div>
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                    <div className="w-14 h-14 sm:w-16 sm:h-16 bg-[#F3C92C] rounded-lg flex items-center justify-center shadow-lg shadow-[#F3C92C]/20 flex-shrink-0">
-                      <BookOpen className="h-7 w-7 sm:h-8 sm:w-8 text-background" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-2 mb-1">
-                        <h4 className="font-medium text-sm sm:text-base">História Medieval</h4>
-                        <span className="px-2 py-0.5 text-xs bg-muted rounded-full">Módulo 2</span>
-                      </div>
-                      <p className="text-xs sm:text-sm text-muted-foreground mb-2">
-                        Sociedade Feudal
-                      </p>
-                      <div className="w-full bg-muted rounded-full h-2">
-                        <div
-                          className="bg-[#F3C92C] h-2 rounded-full transition-all"
-                          style={{ width: "60%" }}
-                        ></div>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-2">
-                        60% concluído • 2 aulas restantes
-                      </p>
-                    </div>
-                    <Button
-                      onClick={() => navigate("/course/1/lesson/5")}
-                      className="bg-[#F3C92C] hover:bg-[#F3C92C]/80 text-background shadow-lg shadow-[#F3C92C]/20 w-full sm:w-auto"
-                    >
-                      Continuar
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Próximas Atividades */}
-                <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-base sm:text-lg font-semibold">Próximas Atividades</h3>
-                    <button className="text-xs sm:text-sm text-muted-foreground hover:text-primary transition-colors">
-                      Ver todas
-                    </button>
-                  </div>
-                  <div className="space-y-3">
-                    <div className="group flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3 sm:p-4 rounded-lg border bg-card hover:border-primary/50 transition-all duration-300">
-                      <div className="bg-primary/10 p-2 sm:p-3 rounded-lg group-hover:bg-primary/20 transition-colors">
-                        <BookOpen className="h-5 w-5 text-primary" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-medium text-sm sm:text-base">Aula de Geografia</p>
-                          <span className="px-2 py-0.5 text-xs bg-primary/10 text-primary rounded-full">Novo</span>
-                        </div>
-                        <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-                          Clima e Vegetação
-                        </p>
-                      </div>
-                      <Button variant="outline" size="sm" className="w-full sm:w-auto mt-2 sm:mt-0">
-                        Iniciar
-                      </Button>
-                    </div>
-
-                    <div className="group flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3 sm:p-4 rounded-lg border bg-card hover:border-primary/50 transition-all duration-300">
-                      <div className="bg-primary/10 p-2 sm:p-3 rounded-lg group-hover:bg-primary/20 transition-colors">
-                        <Brain className="h-5 w-5 text-primary" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-medium text-sm sm:text-base">Exercício de Matemática</p>
-                          <span className="px-2 py-0.5 text-xs border border-primary/20 text-primary rounded-full">10 questões</span>
-                        </div>
-                        <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-                          Álgebra Linear
-                        </p>
-                      </div>
-                      <Button variant="outline" size="sm" className="w-full sm:w-auto mt-2 sm:mt-0">
-                        Resolver
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Cards Inferiores */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                <div className="group p-4 rounded-lg border bg-card text-card-foreground hover:border-primary/50 transition-all duration-300">
-                  <div className="bg-primary/10 p-2 sm:p-3 rounded-lg w-fit group-hover:bg-primary/20 transition-colors mb-3">
-                    <BookOpen className="h-5 w-5 text-primary" />
-                  </div>
-                  <h4 className="font-semibold text-sm sm:text-base mb-1">
-                    Material Completo
-                  </h4>
-                  <p className="text-xs sm:text-sm text-muted-foreground">
-                    Videoaulas, textos e exercícios para fixação
-                  </p>
-                </div>
-
-                <div className="group p-4 rounded-lg border bg-card text-card-foreground hover:border-primary/50 transition-all duration-300">
-                  <div className="bg-primary/10 p-2 sm:p-3 rounded-lg w-fit group-hover:bg-primary/20 transition-colors mb-3">
-                    <Brain className="h-5 w-5 text-primary" />
-                  </div>
-                  <h4 className="font-semibold text-sm sm:text-base mb-1">
-                    Exercícios Práticos
-                  </h4>
-                  <p className="text-xs sm:text-sm text-muted-foreground">
-                    Questões e simulados para testar seu conhecimento
-                  </p>
-                </div>
-
-                <div className="group p-4 rounded-lg border bg-card text-card-foreground hover:border-primary/50 transition-all duration-300">
-                  <div className="bg-primary/10 p-2 sm:p-3 rounded-lg w-fit group-hover:bg-primary/20 transition-colors mb-3">
-                    <Trophy className="h-5 w-5 text-primary" />
-                  </div>
-                  <h4 className="font-semibold text-sm sm:text-base mb-1">
-                    Acompanhamento
-                  </h4>
-                  <p className="text-xs sm:text-sm text-muted-foreground">
-                    Monitore seu progresso em cada matéria
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Coluna de Notificações */}
-            <div className="w-full lg:w-80">
-              <div className="rounded-lg p-4 sm:p-6 border bg-card text-card-foreground lg:sticky lg:top-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-base sm:text-lg font-semibold">Notificações</h2>
-                  <span className="px-2 py-1 text-xs font-medium bg-[#F3C92C] text-background rounded-full">
-                    3 novas
-                  </span>
-                </div>
-                <div className="space-y-3 sm:space-y-4">
-                  <div className="group border-l-2 border-[#F3C92C] pl-3 sm:pl-4 py-2 hover:bg-primary/5 rounded-r-lg transition-colors">
-                    <div className="flex items-center gap-2 mb-1">
-                      <p className="text-sm font-medium">Nova aula disponível</p>
-                      <span className="px-2 py-0.5 text-xs bg-primary/10 text-primary rounded-full">Novo</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      História Medieval - Módulo 2
-                    </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <Clock className="h-3 w-3 text-muted-foreground" />
-                      <p className="text-xs text-muted-foreground">Há 2 horas</p>
-                    </div>
-                  </div>
-
-                  <div className="group border-l-2 border-[#F3C92C] pl-3 sm:pl-4 py-2 hover:bg-primary/5 rounded-r-lg transition-colors">
-                    <div className="flex items-center gap-2 mb-1">
-                      <p className="text-sm font-medium">Exercício corrigido</p>
-                      <span className="px-2 py-0.5 text-xs border border-primary/20 text-primary rounded-full">Nota: 9.5</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Matemática - Álgebra Linear
-                    </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <Clock className="h-3 w-3 text-muted-foreground" />
-                      <p className="text-xs text-muted-foreground">Há 5 horas</p>
-                    </div>
-                  </div>
-
-                  <div className="group border-l-2 border-[#F3C92C] pl-3 sm:pl-4 py-2 hover:bg-primary/5 rounded-r-lg transition-colors">
-                    <div className="flex items-center gap-2 mb-1">
-                      <p className="text-sm font-medium">Novo curso disponível</p>
-                      <span className="px-2 py-0.5 text-xs bg-primary/10 text-primary rounded-full">Curso</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Literatura Brasileira
-                    </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <Clock className="h-3 w-3 text-muted-foreground" />
-                      <p className="text-xs text-muted-foreground">Há 1 dia</p>
-                    </div>
-                  </div>
-                </div>
-
-                <button className="w-full mt-4 sm:mt-6 px-4 py-2 border rounded-lg text-xs sm:text-sm hover:bg-primary/5 transition-colors">
-                  Ver todas as notificações
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-        <FloatingChatButton />
-      </div>
-    );
-  }
+  // Desativar loading quando mudar de aula
+  useEffect(() => {
+    setIsChangingLesson(false);
+  }, [lesson?.id]);
 
   // Função para converter URLs de vídeo em URLs de embed
   const getVideoEmbedUrl = (url) => {
@@ -483,84 +449,256 @@ function CourseContent({ lesson, onLessonComplete }) {
 
   const isVimeoVideo = lesson?.videoUrl?.includes("vimeo.com");
   const vimeoId = isVimeoVideo ? getVimeoId(lesson.videoUrl) : null;
+  const videoUrl = lesson?.videoUrl;
+  // Se não houver lição ou se showExplore for true, mostra a página de exploração
+  if (!lesson || location.state?.showExplore) {
+    return (
+      <div className="h-full overflow-y-auto bg-background">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+          <div className="flex flex-col lg:flex-row gap-4 sm:gap-6">
+            {/* Coluna Principal */}
+            <div className="flex-1 space-y-4 sm:space-y-6">
+              <div className="rounded-lg p-4 sm:p-6 border bg-card text-card-foreground shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
+                  <div>
+                    <h1 className="text-xl sm:text-2xl font-bold mb-2 text-[#F3C92C]">
+                      Bem-vindo de volta!
+                    </h1>
+                    <p className="text-sm sm:text-base text-muted-foreground">
+                      Continue sua jornada de aprendizado
+                    </p>
+                  </div>
+                  <div className="sm:block">
+                    <span className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs sm:text-sm font-medium text-primary ring-1 ring-inset ring-primary/20">
+                      Nível Atual: Intermediário
+                    </span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 mb-6">
+                  {/* Card de Exercícios Concluídos */}
+                  <CompletedExercisesCard userId={currentUser?.id} />
 
-  return (
-    <div className="h-full overflow-y-auto bg-background">
-      <div className="grid grid-cols-12 gap-4">
-        <div
-          className="col-start-2 col-span-8 p-6 space-y-6"
-          style={{ marginLeft: "-2rem" }}
-        >
-          <h1 className="text-2xl font-bold">{lesson.title}</h1>
+                  {/* Card de Conquistas */}
+                  <AchievementsCard userId={currentUser?.id} />
 
-          <div
-            className="relative rounded-lg overflow-hidden bg-black w-full max-w-2xl mx-auto"
-            style={{ boxShadow: "0 4px 20px rgba(243, 201, 44, 0.2)" }}
-          >
-            <div className="aspect-video relative">
-              {isVimeoVideo && vimeoId ? (
-                <VimeoPlayer
-                  videoId={vimeoId}
-                  onVideoEnd={() => handleVideoEnd()}
-                  lessonId={lesson.id}
-                />
-              ) : (
-                <iframe
-                  className="absolute inset-0 w-full h-full"
-                  src={getVideoEmbedUrl(lesson.videoUrl)}
-                  title={lesson.title}
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                  referrerPolicy="origin"
-                  loading="lazy"
-                  sandbox="allow-scripts allow-same-origin allow-presentation"
-                  onEnded={handleVideoEnd}
-                />
-              )}
-            </div>
-          </div>
+                  {/* Card de Aulas Concluídas */}
+                  <CompletedLessonsCard userId={currentUser?.id} />
 
-          <div className="prose max-w-none">
-            <p className="text-muted-foreground whitespace-pre-line">
-              {lesson.description}
-            </p>
-          </div>
+                  {/* Card de Horas Estudadas */}
+                  <StudyTimeCard userId={currentUser?.id} />
+                </div>
+                {/* Último Curso */}
+                <div className="flex flex-col gap-6 lg:gap-8">
+                  <ContinueStudying
+                    proximaAulaCallback={(aula) => setProximaAula(aula)}
+                    onCoursesClick={handleCoursesClick}
+                  />
+                  <NextActivities
+                    nextLesson={proximaAula}
+                    onCoursesClick={handleCoursesClick}
+                    onScheduleClick={onScheduleClick}
+                  />
+                </div>
+                {/* Próximas Atividades */}
+              </div>
+              {/* Cards Inferiores */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                <div className="group p-4 rounded-lg border bg-card text-card-foreground hover:border-primary/50 transition-all duration-300">
+                  <div className="bg-primary/10 p-2 sm:p-3 rounded-lg w-fit group-hover:bg-primary/20 transition-colors mb-3">
+                    <BookOpen
+                      className="h-5 w-5 text-primary"
+                      aria-hidden="true"
+                    />
+                  </div>
+                  <h4 className="font-semibold text-sm sm:text-base mb-1">
+                    Material Completo
+                  </h4>
+                  <p className="text-xs sm:text-sm text-muted-foreground">
+                    Videoaulas, textos e exercícios para fixação
+                  </p>
+                </div>
 
-          {Array.isArray(lesson.resources) && lesson.resources.length > 0 && (
-            <div className="space-y-3">
-              <h3 className="text-lg font-semibold">Material Complementar</h3>
-              <div className="grid gap-2 max-w-[160px]">
-                {lesson.resources.map((resource, index) => (
-                  <Button
-                    key={index}
-                    variant="outline"
-                    className="w-full justify-start h-12"
-                    onClick={() => window.open(resource.url, "_blank")}
-                  >
-                    <Download className="mr-2 h-4 w-4" />
-                    {resource.name}
-                  </Button>
-                ))}
+                <div className="group p-4 rounded-lg border bg-card text-card-foreground hover:border-primary/50 transition-all duration-300">
+                  <div className="bg-primary/10 p-2 sm:p-3 rounded-lg w-fit group-hover:bg-primary/20 transition-colors mb-3">
+                    <Brain
+                      className="h-5 w-5 text-primary"
+                      aria-hidden="true"
+                    />
+                  </div>
+                  <h4 className="font-semibold text-sm sm:text-base mb-1">
+                    Exercícios Práticos
+                  </h4>
+                  <p className="text-xs sm:text-sm text-muted-foreground">
+                    Questões e simulados para testar seu conhecimento
+                  </p>
+                </div>
+
+                <div className="group p-4 rounded-lg border bg-card text-card-foreground hover:border-primary/50 transition-all duration-300">
+                  <div className="bg-primary/10 p-2 sm:p-3 rounded-lg w-fit group-hover:bg-primary/20 transition-colors mb-3">
+                    <Trophy
+                      className="h-5 w-5 text-primary"
+                      aria-hidden="true"
+                    />
+                  </div>
+                  <h4 className="font-semibold text-sm sm:text-base mb-1">
+                    Acompanhamento
+                  </h4>
+                  <p className="text-xs sm:text-sm text-muted-foreground">
+                    Monitore seu progresso em cada matéria
+                  </p>
+                </div>
               </div>
             </div>
-          )}
 
-          {lesson.nextLesson && (
-            <div className="pt-4">
-              <Button
-                className="w-full sm:w-auto flex items-center gap-2"
-                style={{
-                  background:
-                    "linear-gradient(90deg, #B4902A -158.27%, #F3C92C 108.81%)",
-                  border: "none",
-                }}
-                onClick={() => lesson.onNextLesson()}
-              >
-                <PlayCircle className="h-4 w-4" />
-                Próxima Aula
-              </Button>
+            {/* Coluna de Notificações */}
+            <div className="w-full lg:w-80 lg:flex lg:flex-col lg:gap-4">
+              {/* Notificações */}
+              <div className="rounded-lg p-4 sm:p-6 border bg-card text-card-foreground mb-4 lg:mb-0">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-base sm:text-lg font-semibold">
+                    Notificações
+                  </h2>
+                  <span className="px-2 py-1 text-xs font-medium bg-[#F3C92C] text-background rounded-full">
+                    {notifications.length}{" "}
+                    {notifications.length === 1 ? "nova" : "novas"}
+                  </span>
+                </div>
+                <div className="space-y-3 sm:space-y-4">
+                  {notifications.map((notification) => (
+                    <div
+                      key={notification.id}
+                      className="group border-l-2 border-[#F3C92C] pl-3 sm:pl-4 py-2 hover:bg-primary/5 rounded-r-lg transition-colors"
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className="text-sm font-medium">
+                          {notification.title}
+                        </p>
+                        {notification.grade ? (
+                          <span className="px-2 py-0.5 text-xs border border-primary/20 text-primary rounded-full">
+                            Nota: {notification.grade}
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 text-xs bg-primary/10 text-primary rounded-full">
+                            {notification.type || "Novo"}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {notification.message}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {formatRelativeTime(notification.created_at)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Eventos */}
+              <div className="mt-4 lg:mt-0">
+                <DailyEvents noMargin />
+              </div>
             </div>
-          )}
+          </div>
+        </div>
+        <FloatingChatButton />
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid lg:grid-cols-12 h-full">
+      {/* Conteúdo Principal */}
+      <div className="lg:col-span-9 2xl:col-span-10 h-full overflow-y-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 px-4 md:px-6 lg:px-8">
+          <div className="lg:col-start-2 lg:col-span-10 xl:col-start-3 xl:col-span-8 p-4 md:p-6 space-y-4 md:space-y-6">
+            <h1 className="text-xl md:text-2xl font-bold">{lesson.title}</h1>
+
+            <div
+              className="relative rounded-lg overflow-hidden bg-black w-full max-w-4xl mx-auto"
+              style={{ boxShadow: "0 4px 20px rgba(243, 201, 44, 0.2)" }}
+            >
+              <div className="aspect-video relative">
+                {isVimeoVideo && vimeoId ? (
+                  <VimeoPlayer
+                    videoId={vimeoId}
+                    onVideoEnd={() => handleVideoEnd()}
+                    lessonId={lesson.id}
+                  />
+                ) : (
+                  <PandaVideo
+                    videoUrl={videoUrl}
+                    videoId={lesson.id}
+                    userId={currentUser?.id}
+                    onVideoEnd={() => handleVideoEnd()}
+                    width="100%"
+                    height="100%"
+                  />
+                )}
+                {isChangingLesson && (
+                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                    <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 flex items-center gap-2 text-white">
+                      <div className="w-4 h-4 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" />
+                      <span>Próxima aula</span>
+                      <ArrowRight className="w-4 h-4 text-yellow-400 animate-pulse" />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="prose max-w-none">
+              <p className="text-sm md:text-base text-muted-foreground whitespace-pre-line">
+                {lesson.description}
+              </p>
+            </div>
+
+            {Array.isArray(lesson.resources) && lesson.resources.length > 0 && (
+              <div className="space-y-3">
+                <h3 className="text-base md:text-lg font-semibold">
+                  Material Complementar
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-full">
+                  {lesson.resources.map((resource) => (
+                    <Button
+                      key={`${resource.name}-${resource.url}`}
+                      variant="outline"
+                      className="w-full justify-start h-10 md:h-12"
+                      onClick={() => window.open(resource.url, "_blank")}
+                    >
+                      <Download
+                        className="mr-2 h-3 w-3 md:h-4 md:w-4"
+                        aria-hidden="true"
+                      />
+                      <span className="text-xs md:text-sm">
+                        {resource.name}
+                      </span>
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {lesson.nextLesson && (
+              <div className="pt-4">
+                <Button
+                  className="w-full sm:w-auto flex items-center gap-2"
+                  style={{
+                    background:
+                      "linear-gradient(90deg, #B4902A -158.27%, #F3C92C 108.81%)",
+                    border: "none",
+                  }}
+                  onClick={() => lesson.onNextLesson()}
+                >
+                  <PlayCircle
+                    className="h-3 w-3 md:h-4 md:w-4"
+                    aria-hidden="true"
+                  />
+                  <span className="text-xs md:text-sm">Próxima Aula</span>
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

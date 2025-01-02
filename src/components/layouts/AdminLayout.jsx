@@ -7,6 +7,8 @@ import {
   Folders,
   ListChecks,
   ArrowLeft,
+  Bell,
+  Calendar,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -63,6 +65,18 @@ export default function AdminLayout({ children }) {
               <Link to="/admin/questions" className="flex items-center">
                 <ListChecks className="mr-2 h-4 w-4" />
                 Questões
+              </Link>
+            </Button>
+            <Button variant="ghost" className="w-full justify-start" asChild>
+              <Link to="/admin/events" className="flex items-center">
+                <Calendar className="mr-2 h-4 w-4" />
+                Eventos
+              </Link>
+            </Button>
+            <Button variant="ghost" className="w-full justify-start" asChild>
+              <Link to="/admin/notifications" className="flex items-center">
+                <Bell className="mr-2 h-4 w-4" />
+                Notificações
               </Link>
             </Button>
           </div>

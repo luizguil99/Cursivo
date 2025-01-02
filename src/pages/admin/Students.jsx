@@ -19,7 +19,14 @@ import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { useToast } from "../../components/ui/use-toast";
 import { supabase } from "@/lib/supabase";
-import { PlusCircle } from "lucide-react";
+import { PlusCircle, Loader2 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 // Função auxiliar para calcular a data de término do plano
 function calculatePlanEndDate(plan) {
@@ -44,6 +51,7 @@ export default function AdminStudents() {
   const [students, setStudents] = useState([]);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState("");
   const [newStudent, setNewStudent] = useState({
     name: "",
     email: "",
@@ -138,37 +146,91 @@ export default function AdminStudents() {
 
   const handleAddStudent = async (e) => {
     e.preventDefault();
+    if (loading) return; // Previne múltiplos cliques
     setLoading(true);
+    setStatus("");
 
     try {
-      // 1. Criar usuário no Authentication do Supabase
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: newStudent.email,
-        password: newStudent.password,
-        options: {
-          data: {
-            name: newStudent.name,
-            role: 'student'
-          }
+      setStatus("Verificando se o email já está cadastrado...");
+
+      // 0. Verificar se o email já está cadastrado
+      const { data: existingUser, error: searchError } = await supabase
+        .from("perfis")
+        .select("id, status")
+        .eq("email", newStudent.email)
+        .single();
+
+      if (searchError && searchError.code !== "PGRST116") {
+        // PGRST116 = não encontrado
+        console.error("Erro ao verificar email:", searchError);
+        throw new Error("Erro ao verificar disponibilidade do email");
+      }
+
+      if (existingUser) {
+        const status = existingUser.status === "ativo" ? "ativo" : "inativo";
+        throw new Error(
+          `Este email já está cadastrado (status: ${status}). Por favor, use outro email.`
+        );
+      }
+
+      setStatus("Criando novo usuário...");
+
+      // 1. Criar usuário no Authentication do Supabase usando a API de admin
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/auth/v1/admin/users`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${
+              import.meta.env.VITE_SUPABASE_SERVICE_KEY
+            }`,
+          },
+          body: JSON.stringify({
+            email: newStudent.email,
+            password: newStudent.password,
+            email_confirm: true,
+            user_metadata: {
+              name: newStudent.name,
+              role: "student",
+            },
+          }),
         }
-      });
+      );
 
-      if (authError) throw authError;
+      const authData = await response.json();
 
-      if (authData?.user) {
-        // 2. Auto-confirmar o email no ambiente self-hosted
-        const { error: confirmError } = await supabase.rpc('confirm_user', {
-          user_id: authData.user.id
-        });
+      if (!response.ok) {
+        // Tratamento de erros específicos da API
+        const errorMessage =
+          authData.msg || authData.message || authData.error_description;
 
-        if (confirmError) {
-          console.error("Erro ao confirmar email:", confirmError);
+        if (errorMessage?.includes("already")) {
+          throw new Error(
+            "Este email já está registrado no sistema de autenticação."
+          );
         }
 
-        // 3. Adicionar informações do usuário na tabela perfis
+        if (errorMessage?.includes("password")) {
+          throw new Error("A senha deve ter pelo menos 6 caracteres.");
+        }
+
+        if (errorMessage?.includes("email")) {
+          throw new Error("O email fornecido é inválido.");
+        }
+
+        throw new Error(errorMessage || "Erro ao criar usuário");
+      }
+
+      setStatus("Criando perfil do aluno...");
+
+      if (authData?.id) {
+        // API retorna id ao invés de user
+        // 2. Adicionar informações do usuário na tabela perfis
         const { error: profileError } = await supabase.from("perfis").insert([
           {
-            id: authData.user.id,
+            id: authData.id,
             nome: newStudent.name,
             email: newStudent.email,
             papel: "student",
@@ -176,19 +238,39 @@ export default function AdminStudents() {
             status_plano: "ativo",
             plano: newStudent.plan,
             data_inicio_plano: new Date().toISOString(),
-            data_fim_plano: calculatePlanEndDate(newStudent.plan)?.toISOString(),
+            data_fim_plano: calculatePlanEndDate(
+              newStudent.plan
+            )?.toISOString(),
           },
         ]);
 
         if (profileError) {
-          // Se houver erro ao criar o perfil, tentar deletar o usuário criado
-          await supabase.auth.admin.deleteUser(authData.user.id);
-          throw profileError;
+          console.error("Erro ao criar perfil:", profileError);
+          throw new Error("Erro ao criar perfil do aluno");
         }
 
+        setStatus("Inicializando progresso...");
+
+        // 3. Inicializar progresso do usuário
+        const { error: progressError } = await supabase
+          .from("progresso_usuario")
+          .insert([
+            {
+              usuario_id: authData.id,
+              progresso: 0,
+            },
+          ]);
+
+        if (progressError) {
+          console.error("Erro ao inicializar progresso:", progressError);
+        }
+
+        setStatus("Finalizando...");
+
         toast({
-          title: "Aluno adicionado com sucesso!",
-          description: "O aluno já pode acessar a plataforma.",
+          title: "✅ Aluno adicionado com sucesso!",
+          description: `O aluno ${newStudent.name} (${newStudent.email}) foi cadastrado e já pode acessar a plataforma com a senha fornecida.`,
+          duration: 5000,
         });
 
         setIsAddDialogOpen(false);
@@ -196,11 +278,28 @@ export default function AdminStudents() {
         fetchStudents();
       }
     } catch (error) {
-      console.error("Erro ao adicionar aluno:", error);
+      console.error("Erro completo ao adicionar aluno:", error);
+
+      // Mensagens de erro amigáveis
+      let errorMessage = error.message;
+
+      if (error.message?.includes("duplicate key")) {
+        errorMessage =
+          "Este email já está cadastrado. Por favor, use outro email.";
+      } else if (error.message?.includes("network")) {
+        errorMessage =
+          "Erro de conexão. Verifique sua internet e tente novamente.";
+      }
+
+      setStatus(`Erro: ${errorMessage}`);
+
       toast({
-        title: "Erro ao adicionar aluno",
-        description: error.message,
+        title: "❌ Erro ao adicionar aluno",
+        description:
+          errorMessage ||
+          "Ocorreu um erro ao adicionar o aluno. Tente novamente.",
         variant: "destructive",
+        duration: 5000,
       });
     } finally {
       setLoading(false);
@@ -289,19 +388,32 @@ export default function AdminStudents() {
             <DialogTitle>Adicionar Novo Aluno</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleAddStudent}>
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="name">Nome</Label>
+            <div className="space-y-4 py-4">
+              {status && (
+                <div
+                  className={`p-3 rounded-md text-sm ${
+                    status.includes("Erro")
+                      ? "bg-red-100 text-red-800"
+                      : "bg-blue-100 text-blue-800"
+                  }`}
+                >
+                  {status}
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label htmlFor="name">Nome Completo</Label>
                 <Input
                   id="name"
                   value={newStudent.name}
                   onChange={(e) =>
                     setNewStudent({ ...newStudent, name: e.target.value })
                   }
+                  placeholder="Digite o nome completo"
+                  disabled={loading}
                   required
                 />
               </div>
-              <div>
+              <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <Input
                   id="email"
@@ -310,10 +422,12 @@ export default function AdminStudents() {
                   onChange={(e) =>
                     setNewStudent({ ...newStudent, email: e.target.value })
                   }
+                  placeholder="Digite o email"
+                  disabled={loading}
                   required
                 />
               </div>
-              <div>
+              <div className="space-y-2">
                 <Label htmlFor="password">Senha</Label>
                 <Input
                   id="password"
@@ -322,30 +436,54 @@ export default function AdminStudents() {
                   onChange={(e) =>
                     setNewStudent({ ...newStudent, password: e.target.value })
                   }
+                  placeholder="Digite a senha"
+                  disabled={loading}
                   required
                 />
               </div>
-              <div>
+              <div className="space-y-2">
                 <Label htmlFor="plan">Plano</Label>
-                <select
-                  id="plan"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
+                <Select
                   value={newStudent.plan}
-                  onChange={(e) =>
-                    setNewStudent({ ...newStudent, plan: e.target.value })
+                  onValueChange={(value) =>
+                    setNewStudent({ ...newStudent, plan: value })
                   }
+                  disabled={loading}
                 >
-                  <option value="teste">Teste (1 dia)</option>
-                  <option value="mensal">Mensal</option>
-                  <option value="semestral">Semestral (6 meses)</option>
-                  <option value="anual">Anual</option>
-                  <option value="vitalicio">Vitalício</option>
-                </select>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione um plano" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="teste">Teste (1 dia)</SelectItem>
+                    <SelectItem value="mensal">Mensal</SelectItem>
+                    <SelectItem value="semestral">Semestral</SelectItem>
+                    <SelectItem value="anual">Anual</SelectItem>
+                    <SelectItem value="vitalicio">Vitalício</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
-            <DialogFooter className="mt-4">
+            <DialogFooter>
+              <Button
+                variant="outline"
+                type="button"
+                onClick={() => setIsAddDialogOpen(false)}
+                disabled={loading}
+              >
+                Cancelar
+              </Button>
               <Button type="submit" disabled={loading}>
-                {loading ? "Adicionando..." : "Adicionar Aluno"}
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Adicionando...
+                  </>
+                ) : (
+                  <>
+                    <PlusCircle className="mr-2 h-4 w-4" />
+                    Adicionar Aluno
+                  </>
+                )}
               </Button>
             </DialogFooter>
           </form>

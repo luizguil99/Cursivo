@@ -165,41 +165,66 @@ export const getUserProgress = async (userId) => {
 // Buscar todas as discussões
 export const getDiscussions = async () => {
   try {
-    // Primeiro busca o usuário atual
-    const {
-      data: { user: currentUser },
-    } = await supabase.auth.getUser();
-
-    // Buscar discussões com comentários e likes
-    const { data, error } = await supabase
-      .from("discussions")
-      .select(
-        `
+    const { data: discussions, error } = await supabase
+      .from("publicacao_comunidade")
+      .select(`
         *,
-        comments:discussion_comments(
+        usuario:usuario_id (
           *
         ),
-        likes:discussion_likes(
-          *
+        comentarios:comentarios_comunidade (
+          *,
+          usuario:usuario_id (
+            *
+          )
         )
-      `
-      )
-      .order("created_at", { ascending: false });
+      `)
+      .order("criado_em", { ascending: false });
 
     if (error) throw error;
 
-    // Processa os dados para o formato esperado
-    const processedData = data.map((discussion) => ({
-      ...discussion,
-      comments: discussion.comments || [],
-      comments_count: discussion.comments?.length || 0,
-      likes_count: discussion.likes?.length || 0,
-      user_has_liked:
-        discussion.likes?.some((like) => like.user_id === currentUser?.id) ||
-        false,
-    }));
+    // Buscar os perfis atualizados para cada usuário único
+    const userIds = new Set();
+    discussions.forEach(discussion => {
+      userIds.add(discussion.usuario_id);
+      discussion.comentarios?.forEach(comment => {
+        userIds.add(comment.usuario_id);
+      });
+    });
 
-    return processedData;
+    const { data: profiles } = await supabase
+      .from('perfis')
+      .select('*')
+      .in('id', Array.from(userIds));
+
+    // Criar um mapa de perfis por ID
+    const profilesMap = new Map(profiles.map(p => [p.id, p]));
+
+    // Atualizar os metadados dos usuários nas discussões
+    const processedDiscussions = discussions.map(discussion => {
+      const userProfile = profilesMap.get(discussion.usuario_id);
+      return {
+        ...discussion,
+        usuario: {
+          ...discussion.usuario,
+          ...userProfile,
+        },
+        comentarios: discussion.comentarios?.map(comment => {
+          const commentUserProfile = profilesMap.get(comment.usuario_id);
+          return {
+            ...comment,
+            usuario: {
+              ...comment.usuario,
+              ...commentUserProfile,
+            },
+          };
+        }),
+        curtidas: discussion.curtidas || 0,
+        comentarios_count: discussion.comentarios?.length || 0,
+      };
+    });
+
+    return processedDiscussions;
   } catch (error) {
     console.error("Erro ao buscar discussões:", error);
     return [];
@@ -210,22 +235,24 @@ export const getDiscussions = async () => {
 export const getDiscussion = async (id) => {
   try {
     const { data, error } = await supabase
-      .from("discussions")
+      .from("publicacao_comunidade")
       .select(
         `
         *,
-        user:user_id (
+        usuario:usuario_id (
           id,
-          email,
+          nome,
           user_metadata
         ),
-        comments:discussion_comments (
+        comentarios:comentarios_comunidade (
           id,
-          content,
-          created_at,
-          user:user_id (
+          conteudo,
+          criado_em,
+          usuario_id,
+          curtidas,
+          usuario:usuario_id (
             id,
-            email,
+            nome,
             user_metadata
           )
         )
@@ -245,18 +272,13 @@ export const getDiscussion = async (id) => {
 // Criar uma nova discussão
 export const createDiscussion = async (title, content, userId) => {
   try {
-    // Primeiro busca os dados do usuário
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError) throw userError;
-
     const { data, error } = await supabase
-      .from("discussions")
+      .from("publicacao_comunidade")
       .insert([
         {
-          title,
-          content,
-          user_id: userId,
-          user_metadata: userData.user.user_metadata,
+          titulo: title,
+          conteudo: content,
+          usuario_id: userId,
         },
       ])
       .select()
@@ -273,41 +295,63 @@ export const createDiscussion = async (title, content, userId) => {
 // Adicionar comentário em uma discussão
 export const addComment = async (discussionId, content, userId) => {
   try {
-    // Primeiro busca os dados do usuário
-    const { data: userData, error: userError } = await supabase.auth.getUser();
+    // Primeiro, busca os metadados do usuário
+    const { data: userProfile, error: userError } = await supabase
+      .from("perfis")
+      .select("nome, user_metadata")
+      .eq("id", userId)
+      .single();
+
     if (userError) throw userError;
 
     // Insere o comentário
     const { data, error } = await supabase
-      .from("discussion_comments")
+      .from("comentarios_comunidade")
       .insert([
         {
-          discussion_id: discussionId,
-          content,
-          user_id: userId,
-          user_metadata: userData.user.user_metadata,
+          publicacao_id: discussionId,
+          conteudo: content,
+          usuario_id: userId,
         },
       ])
-      .select("*, discussion:discussion_id(*)")
+      .select(
+        `
+        *,
+        usuario:usuario_id (
+          id,
+          nome,
+          user_metadata
+        )
+      `
+      )
       .single();
 
     if (error) throw error;
 
-    // Atualiza o contador de comentários na discussão
-    const { error: updateError } = await supabase.rpc(
-      "increment_comments_count",
-      {
-        discussion_id: discussionId,
-      }
-    );
+    // Busca o contador atual
+    const { data: currentCount } = await supabase
+      .from("publicacao_comunidade")
+      .select("comentarios_count")
+      .eq("id", discussionId)
+      .single();
+
+    // Atualiza o contador de comentários na publicação
+    const { error: updateError } = await supabase
+      .from("publicacao_comunidade")
+      .update({
+        comentarios_count: (currentCount?.comentarios_count || 0) + 1,
+      })
+      .eq("id", discussionId);
 
     if (updateError) throw updateError;
 
+    // Retorna o comentário com os dados do usuário
     return {
       ...data,
-      user: {
+      usuario: {
         id: userId,
-        user_metadata: userData.user.user_metadata,
+        nome: userProfile.nome,
+        user_metadata: userProfile.user_metadata,
       },
     };
   } catch (error) {
@@ -316,38 +360,128 @@ export const addComment = async (discussionId, content, userId) => {
   }
 };
 
-// Curtir/descurtir uma discussão
-export const toggleDiscussionLike = async (discussionId, userId) => {
+// Verificar se o usuário curtiu uma publicação
+export const checkUserLike = async (publicacaoId, userId) => {
   try {
-    const { error } = await supabase.rpc("toggle_discussion_like", {
-      p_discussion_id: discussionId,
-      p_user_id: userId,
-    });
+    const { count } = await supabase
+      .from("publicacoes_curtidas")
+      .select("*", { count: "exact", head: true })
+      .eq("publicacao_id", publicacaoId)
+      .eq("usuario_id", userId);
+
+    return count > 0;
+  } catch (error) {
+    console.error("Erro ao verificar curtida:", error);
+    return false;
+  }
+};
+
+// Curtir/descurtir uma publicação
+export const toggleDiscussionLike = async (publicacaoId, userId) => {
+  try {
+    // Verifica se já existe uma curtida
+    const hasLike = await checkUserLike(publicacaoId, userId);
+
+    if (hasLike) {
+      // Remove a curtida
+      const { error: deleteError } = await supabase
+        .from("publicacoes_curtidas")
+        .delete()
+        .eq("publicacao_id", publicacaoId)
+        .eq("usuario_id", userId);
+
+      if (deleteError) throw deleteError;
+
+      // Decrementa o contador
+      const { error: updateError } = await supabase.rpc(
+        "decrement_publicacao_curtidas",
+        { publicacao_id: publicacaoId }
+      );
+
+      if (updateError) throw updateError;
+
+      return { liked: false };
+    } else {
+      // Adiciona a curtida
+      const { error: insertError } = await supabase
+        .from("publicacoes_curtidas")
+        .insert([
+          {
+            publicacao_id: publicacaoId,
+            usuario_id: userId,
+          },
+        ]);
+
+      // Se der erro de violação de unicidade, significa que a curtida já existe
+      if (insertError && insertError.code === "23505") {
+        return { liked: true };
+      }
+
+      if (insertError) throw insertError;
+
+      // Incrementa o contador
+      const { error: updateError } = await supabase.rpc(
+        "increment_publicacao_curtidas",
+        { publicacao_id: publicacaoId }
+      );
+
+      if (updateError) throw updateError;
+
+      return { liked: true };
+    }
+  } catch (error) {
+    console.error("Erro ao curtir/descurtir publicação:", error);
+    throw error;
+  }
+};
+
+// Deletar uma discussão
+export const deleteDiscussion = async (discussionId, userId) => {
+  try {
+    // Primeiro verifica se o usuário é dono da publicação
+    const { data: publicacao } = await supabase
+      .from("publicacao_comunidade")
+      .select("usuario_id")
+      .eq("id", discussionId)
+      .single();
+
+    if (!publicacao || publicacao.usuario_id !== userId) {
+      throw new Error("Você não tem permissão para excluir esta publicação");
+    }
+
+    // Deleta a publicação
+    const { error } = await supabase
+      .from("publicacao_comunidade")
+      .delete()
+      .eq("id", discussionId);
 
     if (error) throw error;
+    return true;
   } catch (error) {
-    console.error("Erro ao curtir/descurtir discussão:", error);
+    console.error("Erro ao deletar discussão:", error);
     throw error;
   }
 };
 
 // Funções de Avatar
-export const updateUserAvatar = async (userId, style) => {
+export const updateUserAvatar = async (userId, style, seed) => {
   try {
-    // Usa o ID do usuário como seed para consistência
+    // Gera a URL do avatar com o estilo e seed selecionados
     const avatarUrl = `https://api.dicebear.com/7.x/${style}/svg?seed=${encodeURIComponent(
-      userId
-    )}&backgroundType=gradientLinear&backgroundColor=b6e3f4,c0aede,d1d4f9`;
+      seed
+    )}`;
 
+    // Atualiza o avatar no auth.users
     const { error } = await supabase.auth.updateUser({
       data: {
         avatar_style: style,
+        avatar_seed: seed,
         avatar_url: avatarUrl,
       },
     });
 
     if (error) throw error;
-    return avatarUrl;
+    return { avatarUrl, style, seed };
   } catch (error) {
     console.error("Erro ao atualizar avatar:", error);
     throw error;
@@ -371,9 +505,9 @@ export const getUserAvatar = (user) => {
 export const getScheduleBlocks = async (userId) => {
   try {
     const { data, error } = await supabase
-      .from('schedule_blocks')
-      .select('*')
-      .eq('user_id', userId);
+      .from("schedule_blocks")
+      .select("*")
+      .eq("user_id", userId);
 
     if (error) throw error;
 
@@ -388,20 +522,20 @@ export const getScheduleBlocks = async (userId) => {
       sunday: [],
     };
 
-    data.forEach(block => {
+    data.forEach((block) => {
       if (schedule[block.day_id]) {
         schedule[block.day_id].push({
           id: block.id,
           name: block.name,
           duration: block.duration,
-          color: block.color
+          color: block.color,
         });
       }
     });
 
     return schedule;
   } catch (error) {
-    console.error('Erro ao buscar blocos do cronograma:', error);
+    console.error("Erro ao buscar blocos do cronograma:", error);
     throw error;
   }
 };
@@ -409,21 +543,23 @@ export const getScheduleBlocks = async (userId) => {
 export const addScheduleBlock = async (userId, dayId, block) => {
   try {
     const { data, error } = await supabase
-      .from('schedule_blocks')
-      .insert([{
-        user_id: userId,
-        day_id: dayId,
-        name: block.name,
-        duration: block.duration,
-        color: block.color
-      }])
+      .from("schedule_blocks")
+      .insert([
+        {
+          user_id: userId,
+          day_id: dayId,
+          name: block.name,
+          duration: block.duration,
+          color: block.color,
+        },
+      ])
       .select()
       .single();
 
     if (error) throw error;
     return data;
   } catch (error) {
-    console.error('Erro ao adicionar bloco ao cronograma:', error);
+    console.error("Erro ao adicionar bloco ao cronograma:", error);
     throw error;
   }
 };
@@ -431,20 +567,20 @@ export const addScheduleBlock = async (userId, dayId, block) => {
 export const updateScheduleBlock = async (blockId, block) => {
   try {
     const { data, error } = await supabase
-      .from('schedule_blocks')
+      .from("schedule_blocks")
       .update({
         name: block.name,
         duration: block.duration,
-        color: block.color
+        color: block.color,
       })
-      .eq('id', blockId)
+      .eq("id", blockId)
       .select()
       .single();
 
     if (error) throw error;
     return data;
   } catch (error) {
-    console.error('Erro ao atualizar bloco do cronograma:', error);
+    console.error("Erro ao atualizar bloco do cronograma:", error);
     throw error;
   }
 };
@@ -452,13 +588,13 @@ export const updateScheduleBlock = async (blockId, block) => {
 export const deleteScheduleBlock = async (blockId) => {
   try {
     const { error } = await supabase
-      .from('schedule_blocks')
+      .from("schedule_blocks")
       .delete()
-      .eq('id', blockId);
+      .eq("id", blockId);
 
     if (error) throw error;
   } catch (error) {
-    console.error('Erro ao deletar bloco do cronograma:', error);
+    console.error("Erro ao deletar bloco do cronograma:", error);
     throw error;
   }
 };
@@ -466,16 +602,16 @@ export const deleteScheduleBlock = async (blockId) => {
 export const moveScheduleBlock = async (blockId, newDayId) => {
   try {
     const { data, error } = await supabase
-      .from('schedule_blocks')
+      .from("schedule_blocks")
       .update({ day_id: newDayId })
-      .eq('id', blockId)
+      .eq("id", blockId)
       .select()
       .single();
 
     if (error) throw error;
     return data;
   } catch (error) {
-    console.error('Erro ao mover bloco do cronograma:', error);
+    console.error("Erro ao mover bloco do cronograma:", error);
     throw error;
   }
 };

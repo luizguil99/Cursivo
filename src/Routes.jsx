@@ -8,6 +8,7 @@ import Performance from "@/pages/Performance";
 import AdminDashboard from "@/pages/admin/Dashboard";
 import AdminStudents from "@/pages/admin/Students";
 import AdminQuestions from "@/pages/admin/Questions";
+import AdminNotifications from "@/pages/admin/Notifications";
 import ManageCourses from "@/pages/admin/ManageCourses";
 import ResetPassword from "@/pages/ResetPassword";
 import UpdatePassword from "@/pages/UpdatePassword";
@@ -15,6 +16,7 @@ import SimulationHistory from "@/pages/SimulationHistory";
 import SimulationExam from "@/pages/SimulationExam";
 import Community from "@/pages/Community";
 import FilterQuestions from "./components/FilterQuestions";
+import LivePage from "@/pages/live";
 
 export default function Routes() {
   return (
@@ -24,8 +26,6 @@ export default function Routes() {
       <Route path="/access-denied" element={<AccessDenied />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/update-password" element={<UpdatePassword />} />
-
-      
 
       {/* Rotas de cursos */}
       <Route path="/" element={<Courses />} />
@@ -38,6 +38,7 @@ export default function Routes() {
       />
       <Route path="/study-guide" element={<StudyGuide />} />
       <Route path="/performance" element={<Performance />} />
+      <Route path="/live" element={<LivePage />} />
 
       {/* Rotas de simulados */}
       <Route path="/simulations/history" element={<SimulationHistory />} />
@@ -49,13 +50,12 @@ export default function Routes() {
      {/* Rota para filtro de questoes */}
       <Route path="/filterquestions" element={<FilterQuestions />} />
 
-      
-
       {/* Rotas administrativas */}
       <Route path="/admin" element={<AdminDashboard />} />
       <Route path="/admin/students" element={<AdminStudents />} />
       <Route path="/admin/questions" element={<AdminQuestions />} />
       <Route path="/admin/manage-courses" element={<ManageCourses />} />
+      <Route path="/admin/notifications" element={<AdminNotifications />} />
     </RouterRoutes>
   );
 }
