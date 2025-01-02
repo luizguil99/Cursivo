@@ -8,14 +8,33 @@ import {
 } from "@/components/ui/card";
 import { Chart } from "@/components/ui/chart";
 import { PieChart } from "@/components/ui/pie-chart";
-import { LineChart } from "@/components/ui/line-chart";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  Area,
+} from "recharts";
+import { LineChart as LineChartComponent } from "@/components/ui/line-chart";
 import Sidebar from "@/components/courses/Sidebar";
 import ModulesSidebar from "@/components/courses/ModulesSidebar";
 import TopNav from "@/components/TopNav";
 import CourseContent from "@/components/courses/CourseContent";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
-import { Brain, BookOpen, Clock, Trophy } from "lucide-react";
+import { Brain, BookOpen, Clock, Trophy, Play } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
+import { CalendarIcon } from "lucide-react";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 function Performance() {
   const [selectedCourse, setSelectedCourse] = useState(null);
@@ -27,10 +46,20 @@ function Performance() {
   const [aulasHoje, setAulasHoje] = useState(0);
   const [tempoTotal, setTempoTotal] = useState(0);
   const [tempoHoje, setTempoHoje] = useState(0);
+  const [tempoMedioAula, setTempoMedioAula] = useState(0);
+  const [aulasMaisLongas, setAulasMaisLongas] = useState([]);
   const [questoesPorAssunto, setQuestoesPorAssunto] = useState({});
   const [questoesAcertadas, setQuestoesAcertadas] = useState(0);
   const [questoesErradas, setQuestoesErradas] = useState(0);
-  const [melhorAssunto, setMelhorAssunto] = useState({ assunto: '', acertos: 0 });
+  const [melhorAssunto, setMelhorAssunto] = useState({
+    assunto: "",
+    acertos: 0,
+  });
+  const [dateRange, setDateRange] = useState({
+    from: new Date(),
+    to: new Date(),
+  });
+  const [dadosTempoMensal, setDadosTempoMensal] = useState([]);
   const { currentUser } = useAuth();
 
   // Buscar medalhas
@@ -95,106 +124,150 @@ function Performance() {
     const fetchAulas = async () => {
       if (!currentUser?.id) return;
       try {
-        const { data: allLessons } = await supabase
+        const { data: allLessons, error } = await supabase
           .from("aulas_concluidas")
-          .select("id, concluido_em, tempo_assistido")
+          .select(
+            `
+            id,
+            concluido_em,
+            tempo_assistido,
+            videoaula_id,
+            videoaulas (
+              titulo
+            )
+          `
+          )
           .eq("usuario_id", currentUser.id);
 
-        setAulasConcluidas(allLessons?.length || 0);
+        if (error) throw error;
 
-        // Aulas de hoje e tempo estudado
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        // Processar dados mensais
+        const processarDadosMensais = (aulas) => {
+          const dadosPorMes = {};
+          
+          aulas?.forEach((aula) => {
+            const data = new Date(aula.concluido_em);
+            const mesAno = format(data, 'MMM/yy', { locale: ptBR });
+            
+            if (!dadosPorMes[mesAno]) {
+              dadosPorMes[mesAno] = 0;
+            }
+            dadosPorMes[mesAno] += aula.tempo_assistido || 0;
+          });
 
-        const aulasDeHoje = allLessons?.filter(
-          (a) => new Date(a.concluido_em) >= today
-        );
-        setAulasHoje(aulasDeHoje?.length || 0);
+          // Converter para array e ordenar por data
+          const dadosOrdenados = Object.entries(dadosPorMes)
+            .map(([mes, tempo]) => ({
+              mes,
+              horas: Number((tempo / 3600).toFixed(1))
+            }))
+            .sort((a, b) => {
+              const [mesA, anoA] = a.mes.split('/');
+              const [mesB, anoB] = b.mes.split('/');
+              return new Date(`${anoA}-${mesA}-01`) - new Date(`${anoB}-${mesB}-01`);
+            });
+
+          setDadosTempoMensal(dadosOrdenados);
+        };
+
+        processarDadosMensais(allLessons);
+
+        // Filtrar por data ou intervalo
+        const aulasFiltradas = filterByDateRange(allLessons);
+        setAulasConcluidas(aulasFiltradas?.length || 0);
 
         // Calcular tempo total
-        const tempoTotalSegundos = allLessons?.reduce(
+        const tempoTotalSegundos = aulasFiltradas?.reduce(
           (acc, curr) => acc + (curr.tempo_assistido || 0),
           0
         );
         setTempoTotal(tempoTotalSegundos || 0);
 
-        // Calcular tempo de hoje
-        const tempoHojeSegundos = aulasDeHoje?.reduce(
-          (acc, curr) => acc + (curr.tempo_assistido || 0),
-          0
-        );
-        setTempoHoje(tempoHojeSegundos || 0);
+        // Tempo médio por aula
+        if (aulasFiltradas?.length > 0) {
+          const media = tempoTotalSegundos / aulasFiltradas.length;
+          setTempoMedioAula(media);
+        }
+
+        // Aulas mais longas
+        const aulasOrdenadas = [...(aulasFiltradas || [])]
+          .sort((a, b) => (b.tempo_assistido || 0) - (a.tempo_assistido || 0))
+          .slice(0, 3);
+        setAulasMaisLongas(aulasOrdenadas);
       } catch (error) {
         console.error("Erro ao buscar aulas:", error);
       }
     };
+
     fetchAulas();
-  }, [currentUser?.id]);
+  }, [currentUser?.id, dateRange]);
 
   // Buscar dados das questões
   useEffect(() => {
-    const fetchQuestoesData = async () => {
+    const fetchQuestoes = async () => {
+      if (!currentUser?.id) return;
       try {
         const { data: questoesConcluidas, error } = await supabase
           .from("questoes_concluidas")
-          .select(`
+          .select(
+            `
             id,
             esta_correta,
             concluido_em,
-            questao_id,
             questoes (
               assunto,
               topico
             )
-          `)
+          `
+          )
           .eq("usuario_id", currentUser.id);
 
         if (error) throw error;
 
+        // Filtrar por data ou intervalo
+        const questoesFiltradas = filterByDateRange(questoesConcluidas);
+
         // Contagem de acertos e erros
-        const acertos = questoesConcluidas.filter(q => q.esta_correta).length;
-        const erros = questoesConcluidas.filter(q => !q.esta_correta).length;
+        const acertos = questoesFiltradas.filter((q) => q.esta_correta).length;
+        const erros = questoesFiltradas.filter((q) => !q.esta_correta).length;
         setQuestoesAcertadas(acertos);
         setQuestoesErradas(erros);
 
-        // Análise por assunto
+        // Calcular questões por assunto
         const assuntos = {};
-        questoesConcluidas.forEach(questao => {
+        questoesFiltradas.forEach((questao) => {
           const assunto = questao.questoes.assunto;
           if (!assuntos[assunto]) {
             assuntos[assunto] = { total: 0, acertos: 0 };
           }
-          assuntos[assunto].total++;
+          assuntos[assunto].total += 1;
           if (questao.esta_correta) {
-            assuntos[assunto].acertos++;
+            assuntos[assunto].acertos += 1;
           }
         });
         setQuestoesPorAssunto(assuntos);
 
         // Encontrar melhor assunto
-        let melhorAssuntoAtual = { assunto: '', acertos: 0, taxa: 0 };
+        let melhorAssuntoAtual = { assunto: "", acertos: 0, taxa: 0 };
         Object.entries(assuntos).forEach(([assunto, dados]) => {
           const taxa = (dados.acertos / dados.total) * 100;
           if (taxa > melhorAssuntoAtual.taxa) {
-            melhorAssuntoAtual = { 
-              assunto, 
+            melhorAssuntoAtual = {
+              assunto,
               acertos: dados.acertos,
+              total: dados.total,
               taxa,
-              total: dados.total
             };
           }
         });
         setMelhorAssunto(melhorAssuntoAtual);
-
       } catch (error) {
         console.error("Erro ao buscar dados das questões:", error);
       }
     };
 
-    if (currentUser) {
-      fetchQuestoesData();
-    }
-  }, [currentUser]);
+    fetchQuestoes();
+  }, [currentUser?.id, dateRange]);
 
   const handleLessonSelect = (lesson) => {
     setSelectedLesson(lesson);
@@ -205,10 +278,35 @@ function Performance() {
     setSelectedLesson(null);
   };
 
+  // Função para filtrar dados por intervalo
+  const filterByDateRange = (data) => {
+    const startOfDay = new Date(dateRange.from);
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const endOfDay = new Date(dateRange.to);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    return data?.filter((item) => {
+      const itemDate = new Date(item.concluido_em);
+      return itemDate >= startOfDay && itemDate <= endOfDay;
+    });
+  };
+
   // Formatar tempo em horas
   const formatTime = (seconds) => {
+    if (!seconds) return "0min 0s";
+
     const hours = Math.floor(seconds / 3600);
-    return hours > 0 ? `${hours}h` : "0h";
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const remainingSeconds = seconds % 60;
+
+    if (hours > 0) {
+      return `${hours}h ${minutes}min ${remainingSeconds}s`;
+    } else if (minutes > 0) {
+      return `${minutes}min ${remainingSeconds}s`;
+    } else {
+      return `${remainingSeconds}s`;
+    }
   };
 
   return (
@@ -225,13 +323,43 @@ function Performance() {
         <div className="p-8 space-y-8">
           <div className="flex justify-between items-center mb-8">
             <div>
-              <h2 className="text-4xl font-bold text-[#F3C92C]">
-                Desempenho
-              </h2>
+              <h2 className="text-4xl font-bold text-[#F3C92C]">Desempenho</h2>
               <p className="text-muted-foreground mt-2">
                 Acompanhe seu progresso e conquistas
               </p>
             </div>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="flex items-center gap-2">
+                  <CalendarIcon className="h-4 w-4" />
+                  {dateRange.from && dateRange.to ? (
+                    <>
+                      {format(dateRange.from, "dd/MM/yy")} -{" "}
+                      {format(dateRange.to, "dd/MM/yy")}
+                    </>
+                  ) : (
+                    "Selecione o período"
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="end">
+                <Calendar
+                  mode="range"
+                  selected={dateRange}
+                  onSelect={(range) => {
+                    if (!range?.from) {
+                      setDateRange({ from: new Date(), to: new Date() });
+                    } else if (range.from && !range.to) {
+                      setDateRange({ from: range.from, to: range.from });
+                    } else {
+                      setDateRange(range);
+                    }
+                  }}
+                  numberOfMonths={2}
+                  locale={ptBR}
+                />
+              </PopoverContent>
+            </Popover>
           </div>
 
           {/* Cards de Métricas */}
@@ -382,87 +510,327 @@ function Performance() {
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {/* Gráfico de Exercícios */}
             <Card className="col-span-1 bg-card/50 backdrop-blur-sm border-muted p-6">
-              <h3 className="text-lg font-semibold mb-4">Progresso dos Exercícios</h3>
+              <h3 className="text-lg font-semibold mb-4">
+                Progresso dos Exercícios
+              </h3>
               <div className="space-y-6">
                 <div className="grid grid-cols-3 gap-4">
                   <div className="bg-[#F3C92C]/10 rounded-lg p-4 text-center">
                     <p className="text-sm text-muted-foreground">Acertos</p>
-                    <p className="text-2xl font-bold text-[#F3C92C]">{questoesAcertadas}</p>
+                    <p className="text-2xl font-bold text-[#F3C92C]">
+                      {questoesAcertadas}
+                    </p>
                   </div>
                   <div className="bg-red-500/10 rounded-lg p-4 text-center">
                     <p className="text-sm text-muted-foreground">Erros</p>
-                    <p className="text-2xl font-bold text-red-500">{questoesErradas}</p>
+                    <p className="text-2xl font-bold text-red-500">
+                      {questoesErradas}
+                    </p>
                   </div>
                   <div className="bg-blue-500/10 rounded-lg p-4 text-center">
                     <p className="text-sm text-muted-foreground">Total</p>
-                    <p className="text-2xl font-bold text-blue-500">{questoesAcertadas + questoesErradas}</p>
+                    <p className="text-2xl font-bold text-blue-500">
+                      {questoesAcertadas + questoesErradas}
+                    </p>
                   </div>
                 </div>
 
                 {melhorAssunto.assunto && (
                   <div className="bg-[#F3C92C]/5 rounded-lg p-4">
-                    <h4 className="text-sm font-medium mb-2">Melhor Desempenho</h4>
-                    <p className="text-lg font-semibold">{melhorAssunto.assunto}</p>
+                    <h4 className="text-sm font-medium mb-2">
+                      Melhor Desempenho
+                    </h4>
+                    <p className="text-lg font-semibold">
+                      {melhorAssunto.assunto}
+                    </p>
                     <p className="text-sm text-muted-foreground">
-                      {melhorAssunto.acertos} acertos de {melhorAssunto.total} questões ({melhorAssunto.taxa.toFixed(1)}%)
+                      {melhorAssunto.acertos} acertos de {melhorAssunto.total}{" "}
+                      questões ({melhorAssunto.taxa.toFixed(1)}%)
                     </p>
                   </div>
                 )}
 
-                <div className="h-[200px]">
+                <div className="h-[200px] relative">
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2">
+                    <p className="text-sm font-medium text-[#F3C92C]">
+                      Acertos{" "}
+                      {(
+                        (questoesAcertadas /
+                          (questoesAcertadas + questoesErradas)) *
+                        100
+                      ).toFixed(0)}
+                      %
+                    </p>
+                  </div>
+                  <div className="absolute right-0 top-1/2 -translate-y-1/2">
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Erros{" "}
+                      {(
+                        (questoesErradas /
+                          (questoesAcertadas + questoesErradas)) *
+                        100
+                      ).toFixed(0)}
+                      %
+                    </p>
+                  </div>
                   <PieChart
                     data={[
-                      { name: "Acertos", value: questoesAcertadas, fill: "#F3C92C" },
-                      { name: "Erros", value: questoesErradas, fill: "#EF4444" }
+                      {
+                        name: "Acertos",
+                        value: questoesAcertadas || 1,
+                        fill: "#F3C92C",
+                      },
+                      {
+                        name: "Erros",
+                        value: questoesErradas || 0,
+                        fill: "#F4F4F5",
+                      },
                     ]}
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <h4 className="text-sm font-medium mb-2">Desempenho por Assunto</h4>
-                  {Object.entries(questoesPorAssunto).map(([assunto, dados]) => (
-                    <div key={assunto} className="bg-muted/50 rounded-lg p-3">
-                      <div className="flex justify-between items-center mb-1">
-                        <p className="text-sm font-medium">{assunto}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {((dados.acertos / dados.total) * 100).toFixed(1)}%
-                        </p>
+                  <h4 className="text-sm font-medium mb-2">
+                    Desempenho por Assunto
+                  </h4>
+                  {Object.entries(questoesPorAssunto).map(
+                    ([assunto, dados]) => (
+                      <div key={assunto} className="bg-muted/50 rounded-lg p-3">
+                        <div className="flex justify-between items-center mb-1">
+                          <p className="text-sm font-medium">{assunto}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {((dados.acertos / dados.total) * 100).toFixed(1)}%
+                          </p>
+                        </div>
+                        <div className="w-full bg-muted rounded-full h-2">
+                          <div
+                            className="bg-[#F3C92C] h-2 rounded-full"
+                            style={{
+                              width: `${(dados.acertos / dados.total) * 100}%`,
+                            }}
+                          />
+                        </div>
                       </div>
-                      <div className="w-full bg-muted rounded-full h-2">
-                        <div
-                          className="bg-[#F3C92C] h-2 rounded-full"
-                          style={{ width: `${(dados.acertos / dados.total) * 100}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  )}
                 </div>
               </div>
             </Card>
 
             {/* Gráfico de Aulas */}
             <Card className="col-span-1 bg-card/50 backdrop-blur-sm border-muted p-6">
-              <h3 className="text-lg font-semibold mb-4">Progresso das Aulas</h3>
-              <div className="h-[300px]">
-                <Chart
-                  data={[
-                    { name: "Total", value: aulasConcluidas },
-                    { name: "Hoje", value: aulasHoje },
-                  ]}
-                />
-              </div>
+              <h3 className="text-lg font-semibold mb-4">
+                Estatísticas de Aulas
+              </h3>
+
+              {aulasConcluidas > 0 ? (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-[#F3C92C]/10 rounded-lg p-4">
+                      <p className="text-sm text-muted-foreground">
+                        Aulas Concluídas
+                      </p>
+                      <div className="mt-1 flex items-baseline">
+                        <p className="text-2xl font-bold text-[#F3C92C]">
+                          {aulasConcluidas}
+                        </p>
+                        {aulasHoje > 0 && (
+                          <p className="ml-2 text-sm text-[#F3C92C]/80">
+                            +{aulasHoje} hoje
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="bg-[#F3C92C]/10 rounded-lg p-4">
+                      <p className="text-sm text-muted-foreground">
+                        Tempo Total
+                      </p>
+                      <div className="mt-1 flex items-baseline">
+                        <p className="text-2xl font-bold text-[#F3C92C]">
+                          {formatTime(tempoTotal)}
+                        </p>
+                        {tempoHoje > 0 && (
+                          <p className="ml-2 text-sm text-[#F3C92C]/80">
+                            +{formatTime(tempoHoje)} hoje
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-[#F3C92C]/5 rounded-lg p-4">
+                    <div className="flex justify-between items-center">
+                      <h4 className="text-sm font-medium">
+                        Tempo Médio por Aula
+                      </h4>
+                      <p className="text-lg font-semibold text-[#F3C92C]">
+                        {formatTime(tempoMedioAula)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {aulasMaisLongas.length > 0 && (
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-medium">Aulas Mais Longas</h4>
+                      {aulasMaisLongas.map((aula) => (
+                        <div
+                          key={aula.id}
+                          className="bg-muted/50 rounded-lg p-3"
+                        >
+                          <p className="text-sm font-medium line-clamp-1">
+                            {aula.videoaulas.titulo}
+                          </p>
+                          <div className="flex items-center mt-1">
+                            <p className="text-xs text-muted-foreground">
+                              Tempo assistido:{" "}
+                              {formatTime(aula.tempo_assistido)}
+                            </p>
+                          </div>
+                          <div className="w-full bg-muted rounded-full h-1.5 mt-2">
+                            <div
+                              className="bg-[#F3C92C] h-1.5 rounded-full"
+                              style={{ width: "100%" }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <div className="bg-[#F3C92C]/10 rounded-full p-4 mb-4">
+                    <Play className="w-8 h-8 text-[#F3C92C]" />
+                  </div>
+                  <h4 className="text-lg font-medium mb-2">
+                    Nenhuma aula assistida
+                  </h4>
+                  <p className="text-sm text-muted-foreground max-w-[250px]">
+                    Comece a assistir as aulas para ver suas estatísticas de
+                    progresso
+                  </p>
+                </div>
+              )}
             </Card>
 
-            {/* Gráfico de Tempo */}
+            {/* Gráfico de Tempo de Estudo por Mês */}
             <Card className="col-span-1 bg-card/50 backdrop-blur-sm border-muted p-6">
-              <h3 className="text-lg font-semibold mb-4">Tempo de Estudo</h3>
+              <div className="flex justify-between items-start mb-6">
+                <div>
+                  <h3 className="text-lg font-semibold">Tempo de Estudo por Mês</h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Total: {formatTime(tempoTotal)}
+                  </p>
+                </div>
+                <div className="flex items-center gap-4 text-sm">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-[#F3C92C]" />
+                    <span className="text-muted-foreground">Horas estudadas</span>
+                  </div>
+                </div>
+              </div>
               <div className="h-[300px]">
-                <PieChart
-                  data={[
-                    { name: "Total", value: tempoTotal / 3600, fill: "#F3C92C" },
-                    { name: "Hoje", value: tempoHoje / 3600, fill: "#FFE17D" },
-                  ]}
-                />
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart 
+                    data={dadosTempoMensal}
+                    margin={{ top: 5, right: 5, left: 0, bottom: 5 }}
+                  >
+                    <defs>
+                      <linearGradient id="horasGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#F3C92C" stopOpacity={0.2}/>
+                        <stop offset="95%" stopColor="#F3C92C" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <XAxis 
+                      dataKey="mes" 
+                      stroke="#888888"
+                      fontSize={12}
+                      tickLine={false}
+                      axisLine={false}
+                      padding={{ left: 10, right: 10 }}
+                    />
+                    <YAxis
+                      stroke="#888888"
+                      fontSize={12}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(value) => `${value}h`}
+                      padding={{ top: 20 }}
+                    />
+                    <Tooltip
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          return (
+                            <div className="rounded-lg border bg-background/95 backdrop-blur-sm p-3 shadow-lg">
+                              <p className="text-sm font-semibold mb-1">
+                                {payload[0].payload.mes}
+                              </p>
+                              <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-[#F3C92C]" />
+                                <p className="text-sm text-muted-foreground">
+                                  {payload[0].value} horas estudadas
+                                </p>
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {Math.round(payload[0].value * 60)} minutos totais
+                              </p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="horas"
+                      stroke="#F3C92C"
+                      strokeWidth={3}
+                      dot={{
+                        fill: "#F3C92C",
+                        strokeWidth: 2,
+                        r: 4,
+                        strokeDasharray: "",
+                      }}
+                      activeDot={{
+                        fill: "#F3C92C",
+                        strokeWidth: 2,
+                        r: 6,
+                        strokeDasharray: "",
+                      }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="horas"
+                      stroke="false"
+                      fillOpacity={1}
+                      fill="url(#horasGradient)"
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="mt-4 grid grid-cols-3 gap-4">
+                <div className="bg-[#F3C92C]/10 rounded-lg p-3">
+                  <p className="text-sm text-muted-foreground">Média Mensal</p>
+                  <p className="text-lg font-semibold text-[#F3C92C]">
+                    {dadosTempoMensal.length > 0
+                      ? (dadosTempoMensal.reduce((acc, curr) => acc + curr.horas, 0) / dadosTempoMensal.length).toFixed(1)
+                      : 0}h
+                  </p>
+                </div>
+                <div className="bg-[#F3C92C]/10 rounded-lg p-3">
+                  <p className="text-sm text-muted-foreground">Melhor Mês</p>
+                  <p className="text-lg font-semibold text-[#F3C92C]">
+                    {dadosTempoMensal.length > 0
+                      ? Math.max(...dadosTempoMensal.map(d => d.horas))
+                      : 0}h
+                  </p>
+                </div>
+                <div className="bg-[#F3C92C]/10 rounded-lg p-3">
+                  <p className="text-sm text-muted-foreground">Total de Meses</p>
+                  <p className="text-lg font-semibold text-[#F3C92C]">
+                    {dadosTempoMensal.length}
+                  </p>
+                </div>
               </div>
             </Card>
           </div>
