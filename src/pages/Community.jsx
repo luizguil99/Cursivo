@@ -732,7 +732,7 @@ export default function Community() {
               </div>
               <DailyEvents />
             </div>
-            <div></div>
+            
           </div>
         </div>
       </div>
