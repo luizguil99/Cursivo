@@ -31,19 +31,22 @@ export default function QuestionList({ filters, searchQuery }) {
               <div>
                 <h3 className="text-lg font-semibold">{question.title}</h3>
                 <div className="flex gap-2 mt-2">
-                  <Badge variant="outline">{question.examBoard.toUpperCase()}</Badge>
+                  <Badge variant="outline">
+                    {question.examBoard.toUpperCase()}
+                  </Badge>
                   <Badge variant="outline">{question.year}</Badge>
-                  <Badge 
-                    variant="outline" 
+                  <Badge
+                    variant="outline"
                     className={
-                      question.difficulty === "facil" 
+                      question.difficulty === "facil"
                         ? "bg-green-50 text-green-600 border-green-200"
                         : question.difficulty === "medio"
                         ? "bg-yellow-50 text-yellow-600 border-yellow-200"
                         : "bg-red-50 text-red-600 border-red-200"
                     }
                   >
-                    {question.difficulty.charAt(0).toUpperCase() + question.difficulty.slice(1)}
+                    {question.difficulty.charAt(0).toUpperCase() +
+                      question.difficulty.slice(1)}
                   </Badge>
                 </div>
               </div>

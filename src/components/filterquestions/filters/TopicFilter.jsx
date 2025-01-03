@@ -9,7 +9,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import { Sparkles } from "lucide-react";
 
-export function TopicFilter({ selectedSubject, selectedTopic, onTopicChange }) {
+export function TopicFilter({ selectedSubject, onTopicChange, selectedTopic }) {
   const [topics, setTopics] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -20,45 +20,51 @@ export function TopicFilter({ selectedSubject, selectedTopic, onTopicChange }) {
         setLoading(true);
         setError(null);
 
+        // Se não houver disciplina selecionada, não buscar tópicos
         if (!selectedSubject || selectedSubject === "all") {
-          console.log("TopicFilter - Limpando tópicos (sem disciplina)");
           setTopics([]);
           return;
         }
 
-        console.log("TopicFilter - Buscando tópicos para disciplina:", selectedSubject);
-
-        const { data, error } = await supabase
+        // Construir a query base
+        let query = supabase
           .from("questoes")
           .select("topico")
-          .eq("assunto", selectedSubject)
           .not("topico", "is", null)
-          .neq("topico", "");
+          .neq("topico", "")
+          .eq("assunto", selectedSubject); // Sempre filtrar por disciplina
+
+        const { data, error } = await query;
 
         if (error) {
-          console.error("TopicFilter - Erro ao buscar tópicos:", error);
           throw error;
         }
 
-        console.log("TopicFilter - Dados brutos:", data);
-
-        const uniqueTopics = [...new Set(
-          data
-            .map(item => item.topico)
-            .filter(topic => topic && topic.trim() !== "")
-        )];
+        // Processar os dados: remover duplicatas e formatar
+        const uniqueTopics = [
+          ...new Set(
+            data
+              .map((item) => item.topico)
+              .filter((topic) => topic && topic.trim() !== "")
+          ),
+        ];
 
         const formattedTopics = uniqueTopics
-          .map(topic => ({
+          .map((topic) => ({
             value: topic.trim(),
-            label: topic.charAt(0).toUpperCase() + topic.slice(1)
+            label: topic.charAt(0).toUpperCase() + topic.slice(1),
           }))
           .sort((a, b) => a.label.localeCompare(b.label));
 
-        console.log("TopicFilter - Tópicos formatados:", formattedTopics);
+        console.log(
+          "TopicFilter - Tópicos encontrados para",
+          selectedSubject,
+          ":",
+          formattedTopics
+        );
         setTopics(formattedTopics);
       } catch (err) {
-        console.error("TopicFilter - Erro:", err);
+        console.error("Erro ao buscar tópicos:", err);
         setError("Erro ao carregar os tópicos");
       } finally {
         setLoading(false);
@@ -67,6 +73,16 @@ export function TopicFilter({ selectedSubject, selectedTopic, onTopicChange }) {
 
     fetchTopics();
   }, [selectedSubject]);
+
+  // Monitorar mudanças importantes
+  useEffect(() => {
+    console.log("TopicFilter - Estado:", {
+      selectedSubject,
+      selectedTopic,
+      topicsCount: topics.length,
+      isDisabled: !selectedSubject || selectedSubject === "all",
+    });
+  }, [selectedSubject, selectedTopic, topics]);
 
   return (
     <div className="space-y-2">
@@ -80,7 +96,7 @@ export function TopicFilter({ selectedSubject, selectedTopic, onTopicChange }) {
           console.log("TopicFilter - Tópico selecionado:", value);
           onTopicChange(value);
         }}
-        disabled={!selectedSubject || selectedSubject === "all"}
+        disabled={!selectedSubject || selectedSubject === "all"} // Removido loading e error do disabled
       >
         <SelectTrigger className="h-11 bg-white border-2 border-gray-200 hover:border-[#F3C92C] focus:border-[#F3C92C] focus:ring-2 focus:ring-[#F3C92C]/20 transition-all duration-200">
           <SelectValue
@@ -91,8 +107,9 @@ export function TopicFilter({ selectedSubject, selectedTopic, onTopicChange }) {
                 ? "Carregando tópicos..."
                 : error
                 ? "Erro ao carregar tópicos"
-                : "Selecione um tópico"
+                : "Todos os tópicos"
             }
+            className="text-gray-600"
           />
         </SelectTrigger>
         <SelectContent>

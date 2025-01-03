@@ -14,11 +14,7 @@ export default function DifficultyFilter({ value, onChange }) {
   return (
     <div className="space-y-3">
       <Label className="text-base">Nível de Dificuldade</Label>
-      <RadioGroup
-        value={value}
-        onValueChange={onChange}
-        className="flex gap-4"
-      >
+      <RadioGroup value={value} onValueChange={onChange} className="flex gap-4">
         {DIFFICULTY_LEVELS.map((level) => (
           <div key={level.id} className="flex items-center space-x-2">
             <RadioGroupItem value={level.id} id={level.id} />
