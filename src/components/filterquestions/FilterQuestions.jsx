@@ -31,6 +31,7 @@ import {
   fetchAssuntos,
   fetchBancas,
 } from "@/services/questoesService";
+import QuestionList from "./QuestionList";
 
 const TOPICS = [
   { value: "algebra", label: "Álgebra" },
@@ -363,98 +364,11 @@ export default function FilterQuestions() {
 
             {/* Lista de Questões */}
             <div className="mt-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                  <BookOpen className="h-5 w-5 text-[#F3C92C]" />
-                  Questões Encontradas
-                </h3>
-                <Badge
-                  variant="outline"
-                  className="text-[#F3C92C] border-[#F3C92C]"
-                >
-                  {questions.length} questões
-                </Badge>
-              </div>
-
-              {error && (
-                <div className="text-center py-6 bg-red-50 rounded-lg border border-red-200 mb-4">
-                  <p className="text-red-600">{error}</p>
-                </div>
-              )}
-
-              <div className="space-y-4">
-                {loading ? (
-                  <div className="text-center py-12">
-                    <Loader2 className="h-8 w-8 animate-spin text-[#F3C92C] mx-auto" />
-                    <p className="text-gray-600 mt-4">Carregando questões...</p>
-                  </div>
-                ) : questions.length > 0 ? (
-                  questions.map((question) => (
-                    <Card
-                      key={question.id}
-                      className="p-6 border border-gray-200 hover:border-[#F3C92C] transition-colors duration-200"
-                    >
-                      <div className="flex justify-between items-start">
-                        <div className="space-y-4">
-                          <div>
-                            <h3 className="text-lg font-semibold text-gray-900">
-                              {question.questao}
-                            </h3>
-                            <div className="flex gap-2 mt-2">
-                              <Badge
-                                variant="outline"
-                                className="bg-[#F3C92C]/10 text-[#F3C92C] border-[#F3C92C]/20"
-                              >
-                                {question.assunto}
-                              </Badge>
-                              {question.topico && (
-                                <Badge variant="outline" className="bg-gray-50">
-                                  {question.topico}
-                                </Badge>
-                              )}
-                              {question.banca_examinadora && (
-                                <Badge variant="outline" className="bg-gray-50">
-                                  {question.banca_examinadora}
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="hover:border-[#F3C92C] hover:text-[#F3C92C]"
-                            onClick={() =>
-                              window.open(question.video_solucao, "_blank")
-                            }
-                            disabled={!question.video_solucao}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="hover:border-[#F3C92C] hover:text-[#F3C92C]"
-                          >
-                            <BookOpen className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </Card>
-                  ))
-                ) : (
-                  <div className="text-center py-12 bg-gray-50 rounded-lg border border-gray-200">
-                    <Search className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600 font-medium">
-                      Nenhuma questão encontrada com os filtros selecionados.
-                    </p>
-                    <p className="text-gray-500 text-sm mt-1">
-                      Tente ajustar seus filtros para encontrar mais resultados.
-                    </p>
-                  </div>
-                )}
-              </div>
+              <QuestionList
+                questions={questions}
+                loading={loading}
+                error={error}
+              />
             </div>
           </div>
         </div>
