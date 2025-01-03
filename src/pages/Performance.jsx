@@ -35,6 +35,7 @@ import { Button } from "@/components/ui/button";
 import { CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { useNavigate } from "react-router-dom";
 
 function Performance() {
   const [selectedCourse, setSelectedCourse] = useState(null);
@@ -61,6 +62,12 @@ function Performance() {
   });
   const [dadosTempoMensal, setDadosTempoMensal] = useState([]);
   const { currentUser } = useAuth();
+  const navigate = useNavigate();
+
+  const [showCourses, setShowCourses] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [showSchedule, setShowSchedule] = useState(false);
+  const [moduleSidebarCollapsed, setModuleSidebarCollapsed] = useState(false);
 
   // Buscar medalhas
   useEffect(() => {
@@ -144,11 +151,11 @@ function Performance() {
         // Processar dados mensais
         const processarDadosMensais = (aulas) => {
           const dadosPorMes = {};
-          
+
           aulas?.forEach((aula) => {
             const data = new Date(aula.concluido_em);
-            const mesAno = format(data, 'MMM/yy', { locale: ptBR });
-            
+            const mesAno = format(data, "MMM/yy", { locale: ptBR });
+
             if (!dadosPorMes[mesAno]) {
               dadosPorMes[mesAno] = 0;
             }
@@ -159,12 +166,14 @@ function Performance() {
           const dadosOrdenados = Object.entries(dadosPorMes)
             .map(([mes, tempo]) => ({
               mes,
-              horas: Number((tempo / 3600).toFixed(1))
+              horas: Number((tempo / 3600).toFixed(1)),
             }))
             .sort((a, b) => {
-              const [mesA, anoA] = a.mes.split('/');
-              const [mesB, anoB] = b.mes.split('/');
-              return new Date(`${anoA}-${mesA}-01`) - new Date(`${anoB}-${mesB}-01`);
+              const [mesA, anoA] = a.mes.split("/");
+              const [mesB, anoB] = b.mes.split("/");
+              return (
+                new Date(`${anoA}-${mesA}-01`) - new Date(`${anoB}-${mesB}-01`)
+              );
             });
 
           setDadosTempoMensal(dadosOrdenados);
@@ -312,26 +321,47 @@ function Performance() {
   return (
     <div className="flex h-screen overflow-hidden bg-gradient-to-br from-background to-muted">
       <TopNav />
-      <Sidebar onCourseSelect={handleCourseSelect} />
+      <Sidebar
+        onCourseSelect={handleCourseSelect}
+        onScheduleClick={() =>
+          navigate("/courses", { state: { showSchedule: true } })
+        }
+        onModuleSidebarToggle={(collapsed) =>
+          setModuleSidebarCollapsed(collapsed)
+        }
+        showCourses={showCourses}
+        setShowCourses={setShowCourses}
+        showMobileMenu={showMobileMenu}
+        setShowMobileMenu={setShowMobileMenu}
+        showSchedule={showSchedule}
+      />
       {selectedCourse && (
         <ModulesSidebar
           course={selectedCourse}
-          onSelectLesson={handleLessonSelect}
+          onTopicSelect={handleLessonSelect}
+          collapsed={moduleSidebarCollapsed}
+          setCollapsed={setModuleSidebarCollapsed}
+          onUpdateCompletion={() => {}}
         />
       )}
       <main className="flex-1 overflow-y-auto">
         <div className="p-8 space-y-8">
-          <div className="flex justify-between items-center mb-8">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
             <div>
-              <h2 className="text-4xl font-bold text-[#F3C92C]">Desempenho</h2>
-              <p className="text-muted-foreground mt-2">
+              <h2 className="text-3xl sm:text-4xl font-bold text-[#F3C92C]">
+                Desempenho
+              </h2>
+              <p className="text-sm sm:text-base text-muted-foreground mt-2">
                 Acompanhe seu progresso e conquistas
               </p>
             </div>
             <Popover>
               <PopoverTrigger asChild>
-                <Button variant="outline" className="flex items-center gap-2">
-                  <CalendarIcon className="h-4 w-4" />
+                <Button
+                  variant="outline"
+                  className="w-full sm:w-auto flex items-center gap-2 text-xs sm:text-sm"
+                >
+                  <CalendarIcon className="h-3 w-3 sm:h-4 sm:w-4" />
                   {dateRange.from && dateRange.to ? (
                     <>
                       {format(dateRange.from, "dd/MM/yy")} -{" "}
@@ -342,7 +372,11 @@ function Performance() {
                   )}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="end">
+              <PopoverContent
+                className="w-auto p-0"
+                align="center"
+                side="bottom"
+              >
                 <Calendar
                   mode="range"
                   selected={dateRange}
@@ -355,7 +389,8 @@ function Performance() {
                       setDateRange(range);
                     }
                   }}
-                  numberOfMonths={2}
+                  numberOfMonths={1}
+                  className="w-auto"
                   locale={ptBR}
                 />
               </PopoverContent>
@@ -550,7 +585,7 @@ function Performance() {
                   </div>
                 )}
 
-                <div className="h-[200px] relative">
+                <div className="h-[120px] sm:h-[200px] relative px-8 sm:px-0">
                   <div className="absolute left-0 top-1/2 -translate-y-1/2">
                     <p className="text-sm font-medium text-[#F3C92C]">
                       Acertos{" "}
@@ -714,65 +749,92 @@ function Performance() {
             </Card>
 
             {/* Gráfico de Tempo de Estudo por Mês */}
-            <Card className="col-span-1 bg-card/50 backdrop-blur-sm border-muted p-6">
-              <div className="flex justify-between items-start mb-6">
+            <Card className="col-span-1 bg-card/50 backdrop-blur-sm border-muted p-4 sm:p-6">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-2 sm:gap-0">
                 <div>
-                  <h3 className="text-lg font-semibold">Tempo de Estudo por Mês</h3>
-                  <p className="text-sm text-muted-foreground mt-1">
+                  <h3 className="text-base sm:text-lg font-semibold">
+                    Tempo de Estudo por Mês
+                  </h3>
+                  <p className="text-xs sm:text-sm text-muted-foreground mt-1">
                     Total: {formatTime(tempoTotal)}
                   </p>
                 </div>
-                <div className="flex items-center gap-4 text-sm">
+                <div className="flex items-center gap-2 text-xs sm:text-sm">
                   <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-[#F3C92C]" />
-                    <span className="text-muted-foreground">Horas estudadas</span>
+                    <div className="w-2 sm:w-3 h-2 sm:h-3 rounded-full bg-[#F3C92C]" />
+                    <span className="text-muted-foreground">
+                      Horas estudadas
+                    </span>
                   </div>
                 </div>
               </div>
-              <div className="h-[300px]">
+              <div className="h-[250px] sm:h-[300px] -mx-4 sm:mx-0">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart 
+                  <LineChart
                     data={dadosTempoMensal}
-                    margin={{ top: 5, right: 5, left: 0, bottom: 5 }}
+                    margin={{
+                      top: 5,
+                      right: 20,
+                      left: 0,
+                      bottom: 5,
+                    }}
                   >
                     <defs>
-                      <linearGradient id="horasGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#F3C92C" stopOpacity={0.2}/>
-                        <stop offset="95%" stopColor="#F3C92C" stopOpacity={0}/>
+                      <linearGradient
+                        id="horasGradient"
+                        x1="0"
+                        y1="0"
+                        x2="0"
+                        y2="1"
+                      >
+                        <stop
+                          offset="5%"
+                          stopColor="#F3C92C"
+                          stopOpacity={0.2}
+                        />
+                        <stop
+                          offset="95%"
+                          stopColor="#F3C92C"
+                          stopOpacity={0}
+                        />
                       </linearGradient>
                     </defs>
-                    <XAxis 
-                      dataKey="mes" 
+                    <XAxis
+                      dataKey="mes"
                       stroke="#888888"
-                      fontSize={12}
+                      fontSize={10}
                       tickLine={false}
                       axisLine={false}
                       padding={{ left: 10, right: 10 }}
+                      tick={{ transform: "translate(0, 8)" }}
+                      interval="preserveStartEnd"
                     />
                     <YAxis
                       stroke="#888888"
-                      fontSize={12}
+                      fontSize={10}
                       tickLine={false}
                       axisLine={false}
                       tickFormatter={(value) => `${value}h`}
                       padding={{ top: 20 }}
+                      width={30}
                     />
                     <Tooltip
                       content={({ active, payload }) => {
                         if (active && payload && payload.length) {
                           return (
-                            <div className="rounded-lg border bg-background/95 backdrop-blur-sm p-3 shadow-lg">
-                              <p className="text-sm font-semibold mb-1">
+                            <div className="rounded-lg border bg-background/95 backdrop-blur-sm p-2 sm:p-3 shadow-lg">
+                              <p className="text-xs sm:text-sm font-semibold mb-1">
                                 {payload[0].payload.mes}
                               </p>
                               <div className="flex items-center gap-2">
-                                <div className="w-2 h-2 rounded-full bg-[#F3C92C]" />
-                                <p className="text-sm text-muted-foreground">
+                                <div className="w-1.5 sm:w-2 h-1.5 sm:h-2 rounded-full bg-[#F3C92C]" />
+                                <p className="text-xs sm:text-sm text-muted-foreground">
                                   {payload[0].value} horas estudadas
                                 </p>
                               </div>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                {Math.round(payload[0].value * 60)} minutos totais
+                              <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
+                                {Math.round(payload[0].value * 60)} minutos
+                                totais
                               </p>
                             </div>
                           );
@@ -784,17 +846,17 @@ function Performance() {
                       type="monotone"
                       dataKey="horas"
                       stroke="#F3C92C"
-                      strokeWidth={3}
+                      strokeWidth={2}
                       dot={{
                         fill: "#F3C92C",
                         strokeWidth: 2,
-                        r: 4,
+                        r: 3,
                         strokeDasharray: "",
                       }}
                       activeDot={{
                         fill: "#F3C92C",
                         strokeWidth: 2,
-                        r: 6,
+                        r: 4,
                         strokeDasharray: "",
                       }}
                     />
@@ -808,26 +870,39 @@ function Performance() {
                   </LineChart>
                 </ResponsiveContainer>
               </div>
-              <div className="mt-4 grid grid-cols-3 gap-4">
-                <div className="bg-[#F3C92C]/10 rounded-lg p-3">
-                  <p className="text-sm text-muted-foreground">Média Mensal</p>
-                  <p className="text-lg font-semibold text-[#F3C92C]">
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4">
+                <div className="bg-[#F3C92C]/10 rounded-lg p-2 sm:p-3">
+                  <p className="text-xs sm:text-sm text-muted-foreground">
+                    Média Mensal
+                  </p>
+                  <p className="text-base sm:text-lg font-semibold text-[#F3C92C]">
                     {dadosTempoMensal.length > 0
-                      ? (dadosTempoMensal.reduce((acc, curr) => acc + curr.horas, 0) / dadosTempoMensal.length).toFixed(1)
-                      : 0}h
+                      ? (
+                          dadosTempoMensal.reduce(
+                            (acc, curr) => acc + curr.horas,
+                            0
+                          ) / dadosTempoMensal.length
+                        ).toFixed(1)
+                      : 0}
+                    h
                   </p>
                 </div>
-                <div className="bg-[#F3C92C]/10 rounded-lg p-3">
-                  <p className="text-sm text-muted-foreground">Melhor Mês</p>
-                  <p className="text-lg font-semibold text-[#F3C92C]">
+                <div className="bg-[#F3C92C]/10 rounded-lg p-2 sm:p-3">
+                  <p className="text-xs sm:text-sm text-muted-foreground">
+                    Melhor Mês
+                  </p>
+                  <p className="text-base sm:text-lg font-semibold text-[#F3C92C]">
                     {dadosTempoMensal.length > 0
-                      ? Math.max(...dadosTempoMensal.map(d => d.horas))
-                      : 0}h
+                      ? Math.max(...dadosTempoMensal.map((d) => d.horas))
+                      : 0}
+                    h
                   </p>
                 </div>
-                <div className="bg-[#F3C92C]/10 rounded-lg p-3">
-                  <p className="text-sm text-muted-foreground">Total de Meses</p>
-                  <p className="text-lg font-semibold text-[#F3C92C]">
+                <div className="bg-[#F3C92C]/10 rounded-lg p-2 sm:p-3">
+                  <p className="text-xs sm:text-sm text-muted-foreground">
+                    Total de Meses
+                  </p>
+                  <p className="text-base sm:text-lg font-semibold text-[#F3C92C]">
                     {dadosTempoMensal.length}
                   </p>
                 </div>

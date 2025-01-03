@@ -351,39 +351,38 @@ export default function Community() {
       if (!discussion) return;
 
       // Verifica o estado atual do like
-      const isLiked = await checkUserLike(discussionId, currentUser.id);
+      const isLiked = discussion.isLiked;
+
+      // Calcula o novo número de curtidas
+      const newLikes = isLiked
+        ? Math.max(0, (discussion.curtidas || 0) - 1)
+        : (discussion.curtidas || 0) + 1;
 
       // Atualiza o estado localmente primeiro (otimista)
       const updatedDiscussions = discussions.map((d) => {
         if (d.id === discussionId) {
           return {
             ...d,
-            curtidas: Math.max(0, (d.curtidas || 0) + (isLiked ? -1 : 1)),
+            curtidas: newLikes,
             isLiked: !isLiked,
           };
         }
         return d;
       });
 
-      // Atualiza o estado imediatamente
+      // Atualiza o estado imediatamente para feedback visual
       setDiscussions(updatedDiscussions);
 
       // Faz a requisição ao servidor em background
       const result = await toggleDiscussionLike(discussionId, currentUser.id);
 
-      if (result) {
-        // Atualiza com o resultado do servidor
-        const finalDiscussions = discussions.map((d) => {
-          if (d.id === discussionId) {
-            return {
-              ...d,
-              isLiked: result.liked,
-            };
-          }
-          return d;
+      if (!result) {
+        // Se houver erro, reverte para o estado anterior
+        setDiscussions(discussions);
+        toast({
+          variant: "destructive",
+          description: "Erro ao processar sua ação.",
         });
-
-        setDiscussions(finalDiscussions);
       }
     } catch (error) {
       console.error("Erro ao curtir/descurtir:", error);
@@ -416,65 +415,69 @@ export default function Community() {
 
     setIsCommenting(true);
 
-    // Encontra a discussão atual
-    const discussion = discussions.find((d) => d.id === discussionId);
-    if (!discussion) return;
-
-    // Cria um comentário temporário com os dados corretos do usuário
-    const tempComment = {
-      id: "temp-" + Date.now(),
-      conteudo: commentText,
-      criado_em: new Date().toISOString(),
-      usuario_id: currentUser.id,
-      usuario: {
-        id: currentUser.id,
-        nome: currentUser.user_metadata?.nome || "Admin",
-        user_metadata: currentUser.user_metadata,
-      },
-    };
-
-    // Atualiza o estado localmente primeiro (otimista)
-    const updatedDiscussions = discussions.map((d) => {
-      if (d.id === discussionId) {
-        return {
-          ...d,
-          comentarios: [...(d.comentarios || []), tempComment],
-          comentarios_count: (d.comentarios_count || 0) + 1,
-        };
-      }
-      return d;
-    });
-
-    // Atualiza o estado imediatamente
-    setDiscussions(updatedDiscussions);
-
-    // Limpa o campo de comentário
-    setCommentText("");
-    setActiveDiscussion(null);
-    setIsCommenting(false);
-
     try {
-      // Faz a requisição ao servidor em background
-      const newComment = await addComment(
-        discussionId,
-        commentText,
-        currentUser.id
-      );
+      // Encontra a discussão atual
+      const discussion = discussions.find((d) => d.id === discussionId);
+      if (!discussion) return;
 
-      // Atualiza o comentário com os dados reais do servidor
-      const finalDiscussions = discussions.map((d) => {
+      // Cria um comentário temporário com os dados corretos do usuário
+      const tempComment = {
+        id: "temp-" + Date.now(),
+        conteudo: commentText,
+        criado_em: new Date().toISOString(),
+        usuario_id: currentUser.id,
+        usuario: {
+          id: currentUser.id,
+          nome: currentUser.user_metadata?.nome || "Admin",
+          user_metadata: currentUser.user_metadata,
+        },
+      };
+
+      // Atualiza o estado localmente primeiro (otimista)
+      const updatedDiscussions = discussions.map((d) => {
         if (d.id === discussionId) {
+          const currentComments = Array.isArray(d.comentarios) ? d.comentarios : [];
           return {
             ...d,
-            comentarios: d.comentarios.map((c) =>
-              c.id === tempComment.id ? newComment : c
-            ),
+            comentarios: [...currentComments, tempComment],
+            comentarios_count: currentComments.length + 1,
           };
         }
         return d;
       });
 
-      setDiscussions(finalDiscussions);
+      // Atualiza o estado imediatamente
+      setDiscussions(updatedDiscussions);
+
+      // Limpa o campo de comentário e fecha o formulário
+      setCommentText("");
+      setActiveDiscussion(null);
+
+      // Faz a requisição ao servidor em background
+      const newComment = await addComment(discussionId, commentText, currentUser.id);
+
+      if (!newComment) {
+        throw new Error("Erro ao adicionar comentário no servidor");
+      }
+
+      // Atualiza o comentário com os dados reais do servidor
+      setDiscussions(prevDiscussions => 
+        prevDiscussions.map(d => {
+          if (d.id === discussionId) {
+            const updatedComments = Array.isArray(d.comentarios) 
+              ? d.comentarios.map(c => c.id === tempComment.id ? newComment : c)
+              : [newComment];
+            
+            return {
+              ...d,
+              comentarios: updatedComments,
+              comentarios_count: updatedComments.length,
+            };
+          }
+          return d;
+        })
+      );
+
     } catch (error) {
       console.error("Erro ao adicionar comentário:", error);
       // Reverte a atualização otimista em caso de erro
@@ -483,6 +486,8 @@ export default function Community() {
         variant: "destructive",
         description: "Erro ao adicionar comentário.",
       });
+    } finally {
+      setIsCommenting(false);
     }
   };
 
