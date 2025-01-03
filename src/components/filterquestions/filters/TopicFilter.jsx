@@ -6,7 +6,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/services/supabase";
 import { Sparkles } from "lucide-react";
 
 export function TopicFilter({ selectedSubject, onTopicChange, selectedTopic }) {
@@ -16,31 +16,24 @@ export function TopicFilter({ selectedSubject, onTopicChange, selectedTopic }) {
 
   useEffect(() => {
     async function fetchTopics() {
+      if (!selectedSubject || selectedSubject === "all") {
+        setTopics([]);
+        return;
+      }
+
       try {
         setLoading(true);
         setError(null);
 
-        // Se não houver disciplina selecionada, não buscar tópicos
-        if (!selectedSubject || selectedSubject === "all") {
-          setTopics([]);
-          return;
-        }
-
-        // Construir a query base
-        let query = supabase
+        const { data, error } = await supabase
           .from("questoes")
           .select("topico")
+          .eq("assunto", selectedSubject)
           .not("topico", "is", null)
-          .neq("topico", "")
-          .eq("assunto", selectedSubject); // Sempre filtrar por disciplina
+          .neq("topico", "");
 
-        const { data, error } = await query;
+        if (error) throw error;
 
-        if (error) {
-          throw error;
-        }
-
-        // Processar os dados: remover duplicatas e formatar
         const uniqueTopics = [
           ...new Set(
             data
@@ -56,12 +49,7 @@ export function TopicFilter({ selectedSubject, onTopicChange, selectedTopic }) {
           }))
           .sort((a, b) => a.label.localeCompare(b.label));
 
-        console.log(
-          "TopicFilter - Tópicos encontrados para",
-          selectedSubject,
-          ":",
-          formattedTopics
-        );
+        console.log("Tópicos encontrados:", formattedTopics);
         setTopics(formattedTopics);
       } catch (err) {
         console.error("Erro ao buscar tópicos:", err);
@@ -74,16 +62,6 @@ export function TopicFilter({ selectedSubject, onTopicChange, selectedTopic }) {
     fetchTopics();
   }, [selectedSubject]);
 
-  // Monitorar mudanças importantes
-  useEffect(() => {
-    console.log("TopicFilter - Estado:", {
-      selectedSubject,
-      selectedTopic,
-      topicsCount: topics.length,
-      isDisabled: !selectedSubject || selectedSubject === "all",
-    });
-  }, [selectedSubject, selectedTopic, topics]);
-
   return (
     <div className="space-y-2">
       <label className="text-sm font-semibold text-gray-900 flex items-center gap-2">
@@ -92,11 +70,8 @@ export function TopicFilter({ selectedSubject, onTopicChange, selectedTopic }) {
       </label>
       <Select
         value={selectedTopic}
-        onValueChange={(value) => {
-          console.log("TopicFilter - Tópico selecionado:", value);
-          onTopicChange(value);
-        }}
-        disabled={!selectedSubject || selectedSubject === "all"} // Removido loading e error do disabled
+        onValueChange={onTopicChange}
+        disabled={!selectedSubject || selectedSubject === "all"}
       >
         <SelectTrigger className="h-11 bg-white border-2 border-gray-200 hover:border-[#F3C92C] focus:border-[#F3C92C] focus:ring-2 focus:ring-[#F3C92C]/20 transition-all duration-200">
           <SelectValue
@@ -107,7 +82,7 @@ export function TopicFilter({ selectedSubject, onTopicChange, selectedTopic }) {
                 ? "Carregando tópicos..."
                 : error
                 ? "Erro ao carregar tópicos"
-                : "Todos os tópicos"
+                : "Selecione um tópico"
             }
             className="text-gray-600"
           />

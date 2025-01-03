@@ -118,12 +118,12 @@ export default function FilterQuestions() {
     try {
       setLoading(true);
       setError(null);
-      
+
       console.log("Buscando questões com filtros:", {
         disciplina: selectedDisciplina,
         topico: selectedAssunto,
         searchQuery,
-        bancaExaminadora: selectedInstitution
+        bancaExaminadora: selectedInstitution,
       });
 
       const data = await fetchQuestoes({

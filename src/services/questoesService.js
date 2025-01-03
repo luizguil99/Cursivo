@@ -106,20 +106,27 @@ export async function fetchAssuntos(disciplina) {
     console.log("Dados brutos dos tópicos:", data);
 
     // Remover duplicatas e formatar
-    const uniqueTopicos = [...new Set(
-      data
-        .map(item => item.topico)
-        .filter(topico => topico && topico.trim() !== "")
-    )];
+    const uniqueTopicos = [
+      ...new Set(
+        data
+          .map((item) => item.topico)
+          .filter((topico) => topico && topico.trim() !== "")
+      ),
+    ];
 
     const formattedTopicos = uniqueTopicos
-      .map(topico => ({
+      .map((topico) => ({
         value: topico.trim(),
-        label: topico.charAt(0).toUpperCase() + topico.slice(1)
+        label: topico.charAt(0).toUpperCase() + topico.slice(1),
       }))
       .sort((a, b) => a.label.localeCompare(b.label));
 
-    console.log("Tópicos formatados para a disciplina", disciplina, ":", formattedTopicos);
+    console.log(
+      "Tópicos formatados para a disciplina",
+      disciplina,
+      ":",
+      formattedTopicos
+    );
     return formattedTopicos;
   } catch (error) {
     console.error("Erro ao buscar tópicos:", error);
