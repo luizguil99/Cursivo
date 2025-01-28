@@ -18,6 +18,13 @@ function Courses() {
   const [showCourses, setShowCourses] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
 
+  // Verificar estado inicial do cronograma
+  useEffect(() => {
+    if (location.state?.showSchedule) {
+      setShowSchedule(true);
+    }
+  }, [location.state]);
+
   useEffect(() => {
     const loadCourseData = async () => {
       if (id) {

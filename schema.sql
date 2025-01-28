@@ -76,7 +76,7 @@ CREATE TYPE "public"."user_role" AS ENUM (
 );
 
 
-ALTER TYPE "public"."user_role" OWNER TO "supabase_admin";
+ALTER TYPE "public"."user_role" OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."confirm_user"("user_id" "uuid") RETURNS "void"
@@ -91,7 +91,7 @@ END;
 $$;
 
 
-ALTER FUNCTION "public"."confirm_user"("user_id" "uuid") OWNER TO "supabase_admin";
+ALTER FUNCTION "public"."confirm_user"("user_id" "uuid") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."decrement_comments_count"("discussion_id" "uuid") RETURNS "void"
@@ -105,7 +105,7 @@ end;
 $$;
 
 
-ALTER FUNCTION "public"."decrement_comments_count"("discussion_id" "uuid") OWNER TO "supabase_admin";
+ALTER FUNCTION "public"."decrement_comments_count"("discussion_id" "uuid") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."decrement_likes_count"() RETURNS "trigger"
@@ -120,7 +120,7 @@ end;
 $$;
 
 
-ALTER FUNCTION "public"."decrement_likes_count"() OWNER TO "supabase_admin";
+ALTER FUNCTION "public"."decrement_likes_count"() OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."eh_admin"() RETURNS boolean
@@ -141,7 +141,7 @@ END;
 $$;
 
 
-ALTER FUNCTION "public"."eh_admin"() OWNER TO "supabase_admin";
+ALTER FUNCTION "public"."eh_admin"() OWNER TO "postgres";
 
 SET default_tablespace = '';
 
@@ -156,7 +156,7 @@ CREATE TABLE IF NOT EXISTS "public"."chat_messages" (
 );
 
 
-ALTER TABLE "public"."chat_messages" OWNER TO "supabase_admin";
+ALTER TABLE "public"."chat_messages" OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."get_user_info"("message_row" "public"."chat_messages") RETURNS "jsonb"
@@ -173,7 +173,7 @@ CREATE OR REPLACE FUNCTION "public"."get_user_info"("message_row" "public"."chat
 $$;
 
 
-ALTER FUNCTION "public"."get_user_info"("message_row" "public"."chat_messages") OWNER TO "supabase_admin";
+ALTER FUNCTION "public"."get_user_info"("message_row" "public"."chat_messages") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."increment_comments_count"("discussion_id" "uuid") RETURNS "void"
@@ -187,7 +187,7 @@ end;
 $$;
 
 
-ALTER FUNCTION "public"."increment_comments_count"("discussion_id" "uuid") OWNER TO "supabase_admin";
+ALTER FUNCTION "public"."increment_comments_count"("discussion_id" "uuid") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."increment_likes_count"() RETURNS "trigger"
@@ -202,7 +202,7 @@ end;
 $$;
 
 
-ALTER FUNCTION "public"."increment_likes_count"() OWNER TO "supabase_admin";
+ALTER FUNCTION "public"."increment_likes_count"() OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."is_admin"() RETURNS boolean
@@ -218,7 +218,7 @@ END;
 $$;
 
 
-ALTER FUNCTION "public"."is_admin"() OWNER TO "supabase_admin";
+ALTER FUNCTION "public"."is_admin"() OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."toggle_discussion_like"("p_discussion_id" "uuid", "p_user_id" "uuid") RETURNS "void"
@@ -243,7 +243,7 @@ end;
 $$;
 
 
-ALTER FUNCTION "public"."toggle_discussion_like"("p_discussion_id" "uuid", "p_user_id" "uuid") OWNER TO "supabase_admin";
+ALTER FUNCTION "public"."toggle_discussion_like"("p_discussion_id" "uuid", "p_user_id" "uuid") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."update_counters"() RETURNS "trigger"
@@ -276,7 +276,7 @@ END;
 $$;
 
 
-ALTER FUNCTION "public"."update_counters"() OWNER TO "supabase_admin";
+ALTER FUNCTION "public"."update_counters"() OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."update_updated_at_column"() RETURNS "trigger"
@@ -289,7 +289,7 @@ end;
 $$;
 
 
-ALTER FUNCTION "public"."update_updated_at_column"() OWNER TO "supabase_admin";
+ALTER FUNCTION "public"."update_updated_at_column"() OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."aulas_concluidas" (
@@ -299,6 +299,10 @@ CREATE TABLE IF NOT EXISTS "public"."aulas_concluidas" (
     "concluido_em" timestamp with time zone,
     "tempo_assistido" integer
 );
+ALTER TABLE "public"."aulas_concluidas"
+ADD COLUMN IF NOT EXISTS "tempo_assistido" integer;
+
+
 
 
 ALTER TABLE "public"."aulas_concluidas" OWNER TO "supabase_admin";
@@ -315,7 +319,7 @@ CREATE TABLE IF NOT EXISTS "public"."chats" (
 );
 
 
-ALTER TABLE "public"."chats" OWNER TO "supabase_admin";
+ALTER TABLE "public"."chats" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."cursos" (
@@ -327,7 +331,7 @@ CREATE TABLE IF NOT EXISTS "public"."cursos" (
 );
 
 
-ALTER TABLE "public"."cursos" OWNER TO "supabase_admin";
+ALTER TABLE "public"."cursos" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."discussion_comments" (
@@ -342,7 +346,7 @@ CREATE TABLE IF NOT EXISTS "public"."discussion_comments" (
 );
 
 
-ALTER TABLE "public"."discussion_comments" OWNER TO "supabase_admin";
+ALTER TABLE "public"."discussion_comments" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."discussion_likes" (
@@ -353,7 +357,7 @@ CREATE TABLE IF NOT EXISTS "public"."discussion_likes" (
 );
 
 
-ALTER TABLE "public"."discussion_likes" OWNER TO "supabase_admin";
+ALTER TABLE "public"."discussion_likes" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."discussions" (
@@ -369,7 +373,7 @@ CREATE TABLE IF NOT EXISTS "public"."discussions" (
 );
 
 
-ALTER TABLE "public"."discussions" OWNER TO "supabase_admin";
+ALTER TABLE "public"."discussions" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."event_participants" (
@@ -380,7 +384,7 @@ CREATE TABLE IF NOT EXISTS "public"."event_participants" (
 );
 
 
-ALTER TABLE "public"."event_participants" OWNER TO "supabase_admin";
+ALTER TABLE "public"."event_participants" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."events" (
@@ -400,7 +404,7 @@ CREATE TABLE IF NOT EXISTS "public"."events" (
 );
 
 
-ALTER TABLE "public"."events" OWNER TO "supabase_admin";
+ALTER TABLE "public"."events" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."historico_simulados" (
@@ -420,7 +424,7 @@ CREATE TABLE IF NOT EXISTS "public"."historico_simulados" (
 );
 
 
-ALTER TABLE "public"."historico_simulados" OWNER TO "supabase_admin";
+ALTER TABLE "public"."historico_simulados" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."modulos" (
@@ -434,7 +438,7 @@ CREATE TABLE IF NOT EXISTS "public"."modulos" (
 );
 
 
-ALTER TABLE "public"."modulos" OWNER TO "supabase_admin";
+ALTER TABLE "public"."modulos" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."notificacoes" (
@@ -448,7 +452,7 @@ CREATE TABLE IF NOT EXISTS "public"."notificacoes" (
 );
 
 
-ALTER TABLE "public"."notificacoes" OWNER TO "supabase_admin";
+ALTER TABLE "public"."notificacoes" OWNER TO "postgres";
 
 
 COMMENT ON TABLE "public"."notificacoes" IS 'Tabela para armazenar notificações do sistema';
@@ -495,12 +499,12 @@ CREATE TABLE IF NOT EXISTS "public"."perfis" (
     "data_fim_plano" timestamp with time zone,
     "ultimo_login" timestamp with time zone,
     "criado_em" timestamp with time zone DEFAULT "now"(),
-    "atualizado_em" timestamp with time zone DEFAULT "now"()
+    "atualizado_em" timestamp with time zone DEFAULT "now"(),
     "user_metadata" "jsonb"
 );
 
 
-ALTER TABLE "public"."perfis" OWNER TO "supabase_admin";
+ALTER TABLE "public"."perfis" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."progresso_usuario" (
@@ -513,7 +517,7 @@ CREATE TABLE IF NOT EXISTS "public"."progresso_usuario" (
 );
 
 
-ALTER TABLE "public"."progresso_usuario" OWNER TO "supabase_admin";
+ALTER TABLE "public"."progresso_usuario" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."questoes" (
@@ -530,8 +534,6 @@ CREATE TABLE IF NOT EXISTS "public"."questoes" (
     "criado_em" timestamp with time zone DEFAULT "now"(),
     "atualizado_em" timestamp with time zone DEFAULT "now"()
 );
-
--- Tabela de questões concluídas
 CREATE TABLE IF NOT EXISTS "public"."questoes_concluidas" (
     "id" "uuid" DEFAULT "extensions"."uuid_generate_v4"() NOT NULL,
     "usuario_id" "uuid",
@@ -573,7 +575,7 @@ CREATE TABLE IF NOT EXISTS "public"."schedule_blocks" (
 );
 
 
-ALTER TABLE "public"."schedule_blocks" OWNER TO "supabase_admin";
+ALTER TABLE "public"."schedule_blocks" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."study_guides" (
@@ -587,7 +589,7 @@ CREATE TABLE IF NOT EXISTS "public"."study_guides" (
 );
 
 
-ALTER TABLE "public"."study_guides" OWNER TO "supabase_admin";
+ALTER TABLE "public"."study_guides" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."study_progress" (
@@ -604,7 +606,7 @@ CREATE TABLE IF NOT EXISTS "public"."study_progress" (
 );
 
 
-ALTER TABLE "public"."study_progress" OWNER TO "supabase_admin";
+ALTER TABLE "public"."study_progress" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."study_topics" (
@@ -618,7 +620,7 @@ CREATE TABLE IF NOT EXISTS "public"."study_topics" (
 );
 
 
-ALTER TABLE "public"."study_topics" OWNER TO "supabase_admin";
+ALTER TABLE "public"."study_topics" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."user_status" (
@@ -629,7 +631,7 @@ CREATE TABLE IF NOT EXISTS "public"."user_status" (
 );
 
 
-ALTER TABLE "public"."user_status" OWNER TO "supabase_admin";
+ALTER TABLE "public"."user_status" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."videoaulas" (
@@ -647,7 +649,7 @@ CREATE TABLE IF NOT EXISTS "public"."videoaulas" (
 );
 
 
-ALTER TABLE "public"."videoaulas" OWNER TO "supabase_admin";
+ALTER TABLE "public"."videoaulas" OWNER TO "postgres";
 
 
 ALTER TABLE ONLY "public"."aulas_concluidas"
@@ -1342,45 +1344,6 @@ GRANT USAGE ON SCHEMA "public" TO "service_role";
 
 
 
--- Tabela de conquistas
-CREATE TABLE IF NOT EXISTS "public"."conquistas" (
-    "id" "uuid" DEFAULT "extensions"."uuid_generate_v4"() NOT NULL,
-    "nome" text NOT NULL,
-    "descricao" text NOT NULL,
-    "icone" text NOT NULL,
-    "tipo" text NOT NULL,
-    "quantidade_necessaria" integer NOT NULL,
-    CONSTRAINT "conquistas_pkey" PRIMARY KEY ("id")
-);
-
--- Tabela de conquistas dos usuários
-CREATE TABLE IF NOT EXISTS "public"."conquistas_usuarios" (
-    "id" "uuid" DEFAULT "extensions"."uuid_generate_v4"() NOT NULL,
-    "usuario_id" "uuid",
-    "conquista_id" "uuid",
-    "desbloqueado_em" timestamp with time zone DEFAULT now(),
-    CONSTRAINT "conquistas_usuarios_pkey" PRIMARY KEY ("id"),
-    CONSTRAINT "conquistas_usuarios_usuario_id_fkey" FOREIGN KEY ("usuario_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE,
-    CONSTRAINT "conquistas_usuarios_conquista_id_fkey" FOREIGN KEY ("conquista_id") REFERENCES "public"."conquistas"("id") ON DELETE CASCADE
-);
-
--- Inserir conquistas iniciais
-INSERT INTO public.conquistas (nome, descricao, icone, tipo, quantidade_necessaria) VALUES
--- Conquistas de aulas
-('Primeira Aula', 'Parabéns por assistir sua primeira aula!', 'graduation', 'aulas', 1),
-('Aluno Dedicado', 'Você já assistiu 10 aulas!', 'book', 'aulas', 10),
-('Mestre das Aulas', 'Incrível! Você assistiu 50 aulas!', 'trophy', 'aulas', 50),
-('Estudante Exemplar', 'Uau! Você completou 100 aulas!', 'star', 'aulas', 100),
-
--- Conquistas de exercícios
-('Primeira Questão', 'Você respondeu sua primeira questão!', 'target', 'exercicios', 1),
-('Praticante', 'Você já respondeu 10 questões!', 'zap', 'exercicios', 10),
-('Expert', 'Impressionante! 50 questões respondidas!', 'award', 'exercicios', 50),
-('Mestre dos Exercícios', 'Fenomenal! 100 questões respondidas!', 'medal', 'exercicios', 100);
-
--- Criar índices para melhor performance
-CREATE INDEX IF NOT EXISTS "conquistas_usuarios_usuario_id_idx" ON "public"."conquistas_usuarios" ("usuario_id");
-CREATE INDEX IF NOT EXISTS "conquistas_usuarios_conquista_id_idx" ON "public"."conquistas_usuarios" ("conquista_id");
 
 
 
