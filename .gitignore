@@ -24,6 +24,9 @@ node_modules
 # Environment files
 .env
 .env.local
+.env.development
+.env.test
+.env.production
 .env.supabase
 .aider*
 .windsurfrules
@@ -38,7 +41,11 @@ node_modules
 /supabase/.temp/
 /supabase/.env.*
 
-
+# Build
+/build
+/dist
+/.next
+/out
 
 # Cache
 .cache
