@@ -167,7 +167,8 @@ export const getDiscussions = async () => {
   try {
     const { data: discussions, error } = await supabase
       .from("publicacao_comunidade")
-      .select(`
+      .select(
+        `
         *,
         usuario:usuario_id (
           *
@@ -178,30 +179,31 @@ export const getDiscussions = async () => {
             *
           )
         )
-      `)
+      `
+      )
       .order("criado_em", { ascending: false });
 
     if (error) throw error;
 
     // Buscar os perfis atualizados para cada usuário único
     const userIds = new Set();
-    discussions.forEach(discussion => {
+    discussions.forEach((discussion) => {
       userIds.add(discussion.usuario_id);
-      discussion.comentarios?.forEach(comment => {
+      discussion.comentarios?.forEach((comment) => {
         userIds.add(comment.usuario_id);
       });
     });
 
     const { data: profiles } = await supabase
-      .from('perfis')
-      .select('*')
-      .in('id', Array.from(userIds));
+      .from("perfis")
+      .select("*")
+      .in("id", Array.from(userIds));
 
     // Criar um mapa de perfis por ID
-    const profilesMap = new Map(profiles.map(p => [p.id, p]));
+    const profilesMap = new Map(profiles.map((p) => [p.id, p]));
 
     // Atualizar os metadados dos usuários nas discussões
-    const processedDiscussions = discussions.map(discussion => {
+    const processedDiscussions = discussions.map((discussion) => {
       const userProfile = profilesMap.get(discussion.usuario_id);
       return {
         ...discussion,
@@ -209,7 +211,7 @@ export const getDiscussions = async () => {
           ...discussion.usuario,
           ...userProfile,
         },
-        comentarios: discussion.comentarios?.map(comment => {
+        comentarios: discussion.comentarios?.map((comment) => {
           const commentUserProfile = profilesMap.get(comment.usuario_id);
           return {
             ...comment,

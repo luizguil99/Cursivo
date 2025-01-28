@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import TopNav from "@/components/TopNav";
 import CommunitySidebar from "@/components/community/CommunitySidebar";
+import OnlineUsers from "@/components/community/OnlineUsers";
+import DailyEvents from "@/components/community/DailyEvents";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAccess } from "@/contexts/AccessContext";
 import { useCommunity } from "@/contexts/CommunityContext";
@@ -20,8 +22,6 @@ import {
 } from "@/lib/supabase";
 import { toast } from "@/components/ui/use-toast";
 import { ThumbsUp, MessageCircle, Share2 } from "lucide-react";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import RichTextEditor from "@/components/community/RichTextEditor";
 import {
   Dialog,
@@ -86,7 +86,10 @@ export default function Community() {
   const [commentText, setCommentText] = useState("");
   const [activeDiscussion, setActiveDiscussion] = useState(null);
   const [isCommenting, setIsCommenting] = useState(false);
-  const [visiblePosts, setVisiblePosts] = useState(5);
+  const [isLoading, setIsLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [selectedStyle, setSelectedStyle] = useState(
     currentUser?.user_metadata?.avatar_style || AVATAR_STYLES[0].value
   );
@@ -97,41 +100,42 @@ export default function Community() {
   const [userName, setUserName] = useState(
     currentUser?.user_metadata?.nome || "Usuário"
   );
+  const ITEMS_PER_PAGE = 5;
 
   // Função para carregar as discussões
-  const loadDiscussions = async () => {
+  const loadDiscussions = async (pageNumber = 1) => {
     try {
-      const discussionsData = await getDiscussions();
+      setIsLoading(true);
+      const from = (pageNumber - 1) * ITEMS_PER_PAGE;
+      const to = from + ITEMS_PER_PAGE - 1;
 
-      if (currentUser) {
-        // Para cada discussão, verifica se o usuário atual curtiu
-        const discussionsWithLikes = await Promise.all(
-          discussionsData.map(async (discussion) => {
-            const isLiked = await checkUserLike(discussion.id, currentUser.id);
-            return {
-              ...discussion,
-              isLiked,
-            };
-          })
-        );
-        setDiscussions(discussionsWithLikes);
+      const { data, error, count } = await supabase
+        .from("publicacao_comunidade")
+        .select("*, comentarios:comentarios_comunidade(*)", { count: "exact" })
+        .order("criado_em", { ascending: false })
+        .range(from, to);
+
+      if (error) throw error;
+
+      if (pageNumber === 1) {
+        setDiscussions(data);
       } else {
-        setDiscussions(discussionsData);
+        setDiscussions((prev) => [...prev, ...data]);
       }
+
+      setHasMore(count > pageNumber * ITEMS_PER_PAGE);
     } catch (error) {
       console.error("Erro ao carregar discussões:", error);
       toast({
+        title: "Erro ao carregar discussões",
+        description: "Por favor, tente novamente mais tarde.",
         variant: "destructive",
-        description: "Erro ao carregar as discussões.",
       });
-      setDiscussions([]);
+    } finally {
+      setIsLoading(false);
+      setIsLoadingMore(false);
     }
   };
-
-  // Carregar discussões quando o componente montar ou quando o usuário mudar
-  useEffect(() => {
-    loadDiscussions();
-  }, [currentUser]);
 
   const handleAvatarChange = async (style, seed) => {
     try {
@@ -351,39 +355,38 @@ export default function Community() {
       if (!discussion) return;
 
       // Verifica o estado atual do like
-      const isLiked = await checkUserLike(discussionId, currentUser.id);
+      const isLiked = discussion.isLiked;
+
+      // Calcula o novo número de curtidas
+      const newLikes = isLiked
+        ? Math.max(0, (discussion.curtidas || 0) - 1)
+        : (discussion.curtidas || 0) + 1;
 
       // Atualiza o estado localmente primeiro (otimista)
       const updatedDiscussions = discussions.map((d) => {
         if (d.id === discussionId) {
           return {
             ...d,
-            curtidas: Math.max(0, (d.curtidas || 0) + (isLiked ? -1 : 1)),
+            curtidas: newLikes,
             isLiked: !isLiked,
           };
         }
         return d;
       });
 
-      // Atualiza o estado imediatamente
+      // Atualiza o estado imediatamente para feedback visual
       setDiscussions(updatedDiscussions);
 
       // Faz a requisição ao servidor em background
       const result = await toggleDiscussionLike(discussionId, currentUser.id);
 
-      if (result) {
-        // Atualiza com o resultado do servidor
-        const finalDiscussions = discussions.map((d) => {
-          if (d.id === discussionId) {
-            return {
-              ...d,
-              isLiked: result.liked,
-            };
-          }
-          return d;
+      if (!result) {
+        // Se houver erro, reverte para o estado anterior
+        setDiscussions(discussions);
+        toast({
+          variant: "destructive",
+          description: "Erro ao processar sua ação.",
         });
-
-        setDiscussions(finalDiscussions);
       }
     } catch (error) {
       console.error("Erro ao curtir/descurtir:", error);
@@ -416,44 +419,46 @@ export default function Community() {
 
     setIsCommenting(true);
 
-    // Encontra a discussão atual
-    const discussion = discussions.find((d) => d.id === discussionId);
-    if (!discussion) return;
-
-    // Cria um comentário temporário com os dados corretos do usuário
-    const tempComment = {
-      id: "temp-" + Date.now(),
-      conteudo: commentText,
-      criado_em: new Date().toISOString(),
-      usuario_id: currentUser.id,
-      usuario: {
-        id: currentUser.id,
-        nome: currentUser.user_metadata?.nome || "Admin",
-        user_metadata: currentUser.user_metadata,
-      },
-    };
-
-    // Atualiza o estado localmente primeiro (otimista)
-    const updatedDiscussions = discussions.map((d) => {
-      if (d.id === discussionId) {
-        return {
-          ...d,
-          comentarios: [...(d.comentarios || []), tempComment],
-          comentarios_count: (d.comentarios_count || 0) + 1,
-        };
-      }
-      return d;
-    });
-
-    // Atualiza o estado imediatamente
-    setDiscussions(updatedDiscussions);
-
-    // Limpa o campo de comentário
-    setCommentText("");
-    setActiveDiscussion(null);
-    setIsCommenting(false);
-
     try {
+      // Encontra a discussão atual
+      const discussion = discussions.find((d) => d.id === discussionId);
+      if (!discussion) return;
+
+      // Cria um comentário temporário com os dados corretos do usuário
+      const tempComment = {
+        id: "temp-" + Date.now(),
+        conteudo: commentText,
+        criado_em: new Date().toISOString(),
+        usuario_id: currentUser.id,
+        usuario: {
+          id: currentUser.id,
+          nome: currentUser.user_metadata?.nome || "Admin",
+          user_metadata: currentUser.user_metadata,
+        },
+      };
+
+      // Atualiza o estado localmente primeiro (otimista)
+      const updatedDiscussions = discussions.map((d) => {
+        if (d.id === discussionId) {
+          const currentComments = Array.isArray(d.comentarios)
+            ? d.comentarios
+            : [];
+          return {
+            ...d,
+            comentarios: [...currentComments, tempComment],
+            comentarios_count: currentComments.length + 1,
+          };
+        }
+        return d;
+      });
+
+      // Atualiza o estado imediatamente
+      setDiscussions(updatedDiscussions);
+
+      // Limpa o campo de comentário e fecha o formulário
+      setCommentText("");
+      setActiveDiscussion(null);
+
       // Faz a requisição ao servidor em background
       const newComment = await addComment(
         discussionId,
@@ -461,20 +466,29 @@ export default function Community() {
         currentUser.id
       );
 
-      // Atualiza o comentário com os dados reais do servidor
-      const finalDiscussions = discussions.map((d) => {
-        if (d.id === discussionId) {
-          return {
-            ...d,
-            comentarios: d.comentarios.map((c) =>
-              c.id === tempComment.id ? newComment : c
-            ),
-          };
-        }
-        return d;
-      });
+      if (!newComment) {
+        throw new Error("Erro ao adicionar comentário no servidor");
+      }
 
-      setDiscussions(finalDiscussions);
+      // Atualiza o comentário com os dados reais do servidor
+      setDiscussions((prevDiscussions) =>
+        prevDiscussions.map((d) => {
+          if (d.id === discussionId) {
+            const updatedComments = Array.isArray(d.comentarios)
+              ? d.comentarios.map((c) =>
+                  c.id === tempComment.id ? newComment : c
+                )
+              : [newComment];
+
+            return {
+              ...d,
+              comentarios: updatedComments,
+              comentarios_count: updatedComments.length,
+            };
+          }
+          return d;
+        })
+      );
     } catch (error) {
       console.error("Erro ao adicionar comentário:", error);
       // Reverte a atualização otimista em caso de erro
@@ -483,6 +497,8 @@ export default function Community() {
         variant: "destructive",
         description: "Erro ao adicionar comentário.",
       });
+    } finally {
+      setIsCommenting(false);
     }
   };
 
@@ -553,13 +569,27 @@ export default function Community() {
     return { style: style.value, seed };
   };
 
-  const handleScroll = (e) => {
-    const bottom =
-      e.target.scrollHeight - e.target.scrollTop === e.target.clientHeight;
-    if (bottom && visiblePosts < discussions.length) {
-      setVisiblePosts((prev) => prev + 5);
+  const handleScroll = useCallback(() => {
+    if (isLoadingMore || !hasMore) return;
+
+    const scrollHeight = document.documentElement.scrollHeight;
+    const scrollTop = document.documentElement.scrollTop;
+    const clientHeight = document.documentElement.clientHeight;
+
+    if (scrollTop + clientHeight >= scrollHeight - 100) {
+      setIsLoadingMore(true);
+      setPage((prev) => prev + 1);
     }
-  };
+  }, [isLoadingMore, hasMore]);
+
+  useEffect(() => {
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [handleScroll]);
+
+  useEffect(() => {
+    loadDiscussions(page);
+  }, [page]);
 
   useEffect(() => {
     if (currentUser && !currentUser.user_metadata?.avatar_style) {
@@ -588,148 +618,122 @@ export default function Community() {
   return (
     <div className="flex min-h-screen bg-background">
       <CommunitySidebar />
-      <div className="flex-1">
+      <div className="flex-1 overflow-y-auto">
         <TopNav />
-        <div className="max-w-4xl mx-auto px-4 py-8">
-          {/* Quick Post Form */}
-          <div className="bg-card rounded-xl shadow-sm border border-yellow-500 p-6 mb-8">
-            <div className="flex items-center space-x-4 mb-4">
-              <Avatar
-                className="cursor-pointer"
-                onClick={() => setDialogOpen(true)}
-              >
-                <AvatarImage
-                  src={
-                    currentUser?.user_metadata?.avatar_url ||
-                    getAvatarUrl(
-                      currentUser,
-                      currentUser?.user_metadata?.avatar_style,
-                      currentUser?.user_metadata?.avatar_seed
-                    )
-                  }
-                  alt="Avatar"
-                />
-                <AvatarFallback>
-                  {getInitials(getDisplayName(currentUser))}
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex-1">
-                <h3 className="font-medium text-foreground">{userName}</h3>
-                <p className="text-sm text-muted-foreground">
-                  Compartilhe seus pensamentos com a comunidade
-                </p>
-              </div>
-            </div>
-            <RichTextEditor
-              content={quickPost}
-              onChange={setQuickPost}
-              placeholder="O que você está pensando?"
-              className="min-h-[120px]"
-            />
-            <div className="mt-4 flex justify-end">
-              <Button
-                onClick={handleQuickPost}
-                disabled={posting || !quickPost.trim()}
-                className="bg-yellow-500 text-white px-6"
-              >
-                {posting ? (
-                  <div className="flex items-center space-x-2">
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Publicando...</span>
+        <div className="container mx-auto px-4 py-8">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            {/* Feed Principal */}
+            <div className="lg:col-span-3 space-y-6">
+              {/* Quick Post Form */}
+              <div className="bg-card rounded-xl shadow-sm border border-yellow-500 p-6">
+                <div className="flex items-center space-x-4 mb-4">
+                  <Avatar
+                    className="cursor-pointer"
+                    onClick={() => setDialogOpen(true)}
+                  >
+                    <AvatarImage
+                      src={
+                        currentUser?.user_metadata?.avatar_url ||
+                        getAvatarUrl(
+                          currentUser,
+                          currentUser?.user_metadata?.avatar_style,
+                          currentUser?.user_metadata?.avatar_seed
+                        )
+                      }
+                      alt="Avatar"
+                    />
+                    <AvatarFallback>
+                      {getInitials(getDisplayName(currentUser))}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1">
+                    <h3 className="font-medium text-foreground">{userName}</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Compartilhe seus pensamentos com a comunidade
+                    </p>
                   </div>
-                ) : (
-                  "Publicar"
-                )}
-              </Button>
-            </div>
-          </div>
+                </div>
+                <RichTextEditor
+                  content={quickPost}
+                  onChange={setQuickPost}
+                  placeholder="O que você está pensando?"
+                  className="min-h-[120px]"
+                />
+                <div className="mt-4 flex justify-end">
+                  <Button
+                    onClick={handleQuickPost}
+                    disabled={posting || !quickPost.trim()}
+                    className="bg-yellow-500 text-white px-6"
+                  >
+                    {posting ? (
+                      <div className="flex items-center space-x-2">
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        <span>Publicando...</span>
+                      </div>
+                    ) : (
+                      "Publicar"
+                    )}
+                  </Button>
+                </div>
+              </div>
 
-          {/* Diálogo de Seleção de Avatar */}
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogContent className="sm:max-w-[425px]">
-              <DialogHeader>
-                <DialogTitle>Escolha seu Avatar</DialogTitle>
-              </DialogHeader>
-              <div className="grid grid-cols-2 gap-4 py-4">
-                {AVATAR_STYLES.map((style) => (
-                  <div key={style.value} className="space-y-2">
-                    <h3 className="text-sm font-medium">{style.label}</h3>
-                    <div className="grid grid-cols-4 gap-2">
-                      {style.seeds.map((seed) => (
-                        <Avatar
-                          key={seed}
-                          className={`cursor-pointer transition-all hover:scale-110 ${
-                            selectedStyle === style.value &&
-                            selectedSeed === seed
-                              ? "ring-2 ring-yellow-500"
-                              : ""
-                          }`}
-                          onClick={() => handleAvatarChange(style.value, seed)}
-                        >
-                          <AvatarImage
-                            src={getAvatarUrl(currentUser, style.value, seed)}
-                            alt={`${style.label} - ${seed}`}
-                          />
-                          <AvatarFallback>{getInitials(seed)}</AvatarFallback>
-                        </Avatar>
-                      ))}
-                    </div>
+              {/* Lista de Discussões */}
+              <div className="space-y-6">
+                {discussions.map((discussion) => (
+                  <div key={discussion.id}>
+                    <DiscussionCard
+                      discussion={discussion}
+                      currentUser={currentUser}
+                      onLike={handleLike}
+                      onComment={handleComment}
+                      onDelete={handleDelete}
+                      isLiking={isLiking}
+                      isCommenting={isCommenting}
+                      activeDiscussion={activeDiscussion}
+                      commentText={commentText}
+                      setCommentText={setCommentText}
+                      onCancelComment={() => {
+                        setActiveDiscussion(null);
+                        setIsCommenting(false);
+                        setCommentText("");
+                      }}
+                      onSubmitComment={submitComment}
+                    />
                   </div>
                 ))}
+
+                {/* Loading Spinner */}
+                {(isLoading || isLoadingMore) && (
+                  <div className="py-8 text-center">
+                    <div className="inline-flex items-center justify-center">
+                      <div className="w-8 h-8 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin" />
+                    </div>
+                  </div>
+                )}
+
+                {/* Mensagem quando não há mais posts */}
+                {!isLoading &&
+                  !isLoadingMore &&
+                  !hasMore &&
+                  discussions.length > 0 && (
+                    <div className="py-8 text-center">
+                      <div className="inline-flex items-center justify-center px-4 py-2 rounded-full bg-yellow-500/10 text-yellow-600 dark:text-yellow-400">
+                        <span>Não há mais publicações para carregar</span>
+                      </div>
+                    </div>
+                  )}
               </div>
-            </DialogContent>
-          </Dialog>
-
-          {/* Discussions List */}
-          <ScrollArea
-            className="h-[calc(100vh-16rem)]"
-            onScrollCapture={handleScroll}
-          >
-            <div className="space-y-6 pr-4">
-              {discussions.slice(0, visiblePosts).map((discussion) => (
-                <div
-                  key={discussion.id}
-                  className="bg-card rounded-xl shadow-sm border border-yellow-500"
-                >
-                  <DiscussionCard
-                    discussion={discussion}
-                    currentUser={currentUser}
-                    onLike={handleLike}
-                    onComment={handleComment}
-                    onDelete={handleDelete}
-                    isLiking={isLiking}
-                    isCommenting={isCommenting}
-                    activeDiscussion={activeDiscussion}
-                    commentText={commentText}
-                    setCommentText={setCommentText}
-                    onCancelComment={() => {
-                      setActiveDiscussion(null);
-                      setIsCommenting(false);
-                      setCommentText("");
-                    }}
-                    onSubmitComment={submitComment}
-                  />
-                </div>
-              ))}
-
-              {/* Loading States */}
-              {visiblePosts < discussions.length && (
-                <div className="py-8 text-center">
-                  <div className="inline-flex items-center space-x-2 text-muted-foreground">
-                    <div className="w-5 h-5 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin" />
-                    <span>Carregando mais publicações...</span>
-                  </div>
-                </div>
-              )}
-              {visiblePosts >= discussions.length && discussions.length > 0 && (
-                <div className="py-8 text-center">
-                  <div className="inline-flex items-center justify-center px-4 py-2 rounded-full bg-yellow-500/10 text-yellow-600 dark:text-yellow-400">
-                    <span>Não há mais publicações para carregar</span>
-                  </div>
-                </div>
-              )}
             </div>
-          </ScrollArea>
+
+            {/* Usuários Online */}
+            <div className="hidden lg:block space-y-6">
+              <div className="bg-card rounded-xl shadow-sm overflow-hidden sticky top-6">
+                <OnlineUsers />
+              </div>
+              <DailyEvents />
+            </div>
+            
+          </div>
         </div>
       </div>
     </div>
