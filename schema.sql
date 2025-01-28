@@ -1,5 +1,3 @@
-
-
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
@@ -298,12 +296,9 @@ CREATE TABLE IF NOT EXISTS "public"."aulas_concluidas" (
     "id" "uuid" DEFAULT "extensions"."uuid_generate_v4"() NOT NULL,
     "usuario_id" "uuid",
     "videoaula_id" "uuid",
-    "concluido_em" timestamp with time zone
+    "concluido_em" timestamp with time zone,
+    "tempo_assistido" integer
 );
-ALTER TABLE "public"."aulas_concluidas"
-ADD COLUMN IF NOT EXISTS "tempo_assistido" integer;
-
-
 
 
 ALTER TABLE "public"."aulas_concluidas" OWNER TO "supabase_admin";
@@ -535,6 +530,8 @@ CREATE TABLE IF NOT EXISTS "public"."questoes" (
     "criado_em" timestamp with time zone DEFAULT "now"(),
     "atualizado_em" timestamp with time zone DEFAULT "now"()
 );
+
+-- Tabela de questões concluídas
 CREATE TABLE IF NOT EXISTS "public"."questoes_concluidas" (
     "id" "uuid" DEFAULT "extensions"."uuid_generate_v4"() NOT NULL,
     "usuario_id" "uuid",
@@ -1874,3 +1871,98 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TAB
 
 
 RESET ALL;
+
+-- Tabela de aulas ao vivo
+CREATE TABLE IF NOT EXISTS "public"."live_classes" (
+    "id" "uuid" DEFAULT "extensions"."uuid_generate_v4"() NOT NULL,
+    "title" text NOT NULL,
+    "description" text,
+    "meet_link" text NOT NULL,
+    "start_time" timestamp with time zone NOT NULL,
+    "end_time" timestamp with time zone NOT NULL,
+    "created_at" timestamp with time zone DEFAULT now(),
+    CONSTRAINT "live_classes_pkey" PRIMARY KEY ("id")
+);
+
+-- Criar índices para melhor performance
+CREATE INDEX IF NOT EXISTS "live_classes_start_time_idx" ON "public"."live_classes" ("start_time");
+CREATE INDEX IF NOT EXISTS "live_classes_end_time_idx" ON "public"."live_classes" ("end_time");
+
+-- Habilitar RLS e adicionar políticas de segurança
+ALTER TABLE "public"."live_classes" ENABLE ROW LEVEL SECURITY;
+
+-- Políticas de segurança para live_classes
+CREATE POLICY "Todos podem ver aulas ao vivo" ON "public"."live_classes"
+    FOR SELECT TO authenticated
+    USING (true);
+
+CREATE POLICY "Apenas admins podem criar aulas ao vivo" ON "public"."live_classes"
+    FOR INSERT TO authenticated
+    WITH CHECK (public.eh_admin());
+
+CREATE POLICY "Apenas admins podem atualizar aulas ao vivo" ON "public"."live_classes"
+    FOR UPDATE TO authenticated
+    USING (public.eh_admin())
+    WITH CHECK (public.eh_admin());
+
+CREATE POLICY "Apenas admins podem deletar aulas ao vivo" ON "public"."live_classes"
+    FOR DELETE TO authenticated
+    USING (public.eh_admin());
+
+    -- Tabela de configurações globais
+CREATE TABLE IF NOT EXISTS "public"."configuracoes_globais" (
+    "id" uuid DEFAULT gen_random_uuid() NOT NULL,
+    "chave" text NOT NULL,
+    "valor" jsonb NOT NULL,
+    "descricao" text,
+    "criado_em" timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
+    "atualizado_em" timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
+    CONSTRAINT "configuracoes_globais_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "configuracoes_globais_chave_key" UNIQUE ("chave")
+);
+
+-- Criar índice para melhor performance
+CREATE INDEX IF NOT EXISTS "configuracoes_globais_chave_idx" ON "public"."configuracoes_globais" ("chave");
+
+-- Habilitar RLS
+ALTER TABLE "public"."configuracoes_globais" ENABLE ROW LEVEL SECURITY;
+
+-- Políticas de segurança
+CREATE POLICY "Permitir leitura para usuários autenticados" 
+ON "public"."configuracoes_globais" FOR SELECT 
+TO authenticated 
+USING (true);
+
+CREATE POLICY "Permitir modificação apenas para admins" 
+ON "public"."configuracoes_globais" 
+FOR ALL 
+TO authenticated 
+USING (public.eh_admin());
+
+-- Inserir configurações iniciais
+INSERT INTO public.configuracoes_globais (chave, valor, descricao)
+VALUES 
+('mostrar_eventos', 'true'::jsonb, 'Controla a visibilidade dos eventos na plataforma'),
+('horarios_aulas', jsonb_build_object(
+    'segunda', ARRAY['08:00', '10:00', '14:00', '16:00'],
+    'terca', ARRAY['08:00', '10:00', '14:00', '16:00'],
+    'quarta', ARRAY['08:00', '10:00', '14:00', '16:00'],
+    'quinta', ARRAY['08:00', '10:00', '14:00', '16:00'],
+    'sexta', ARRAY['08:00', '10:00', '14:00', '16:00']
+), 'Horários das aulas durante a semana'),
+('dias_letivos_2024', jsonb_build_array(
+    '2024-02-01', '2024-02-02', '2024-02-05', '2024-02-06', '2024-02-07'
+), 'Dias letivos para o ano de 2024'),
+('feriados_2024', jsonb_build_array(
+    '2024-01-01', -- Ano Novo
+    '2024-02-12', -- Carnaval
+    '2024-02-13', -- Carnaval
+    '2024-03-29', -- Sexta-feira Santa
+    '2024-04-21', -- Tiradentes
+    '2024-05-01'  -- Dia do Trabalho
+), 'Feriados nacionais em 2024')
+ON CONFLICT (chave) 
+DO UPDATE SET 
+    valor = EXCLUDED.valor,
+    descricao = EXCLUDED.descricao,
+    atualizado_em = timezone('utc'::text, now());
