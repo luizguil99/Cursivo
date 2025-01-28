@@ -23,7 +23,7 @@ import AccessDenied from "./pages/AccessDenied";
 import ResetPassword from "./pages/ResetPassword";
 import Community from "./pages/Community";
 import Discussions from "./pages/community/Discussions";
-import { CommunityProvider } from "@/contexts/CommunityContext";
+import { CommunityProvider } from "./contexts/CommunityContext";
 import DiscussionDetails from "./pages/DiscussionDetails";
 import FilterQuestions from "./components/filterquestions/FilterQuestions";
 import LivePage from "./pages/live";
