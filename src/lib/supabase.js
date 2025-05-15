@@ -98,6 +98,7 @@ const ADMIN_EMAILS = [
   "admin@admin.com",
   "admin@cursivo.com",
   "cursivo@admin.com",
+  "luiz.guilherme100@outlook.com",
 ];
 
 // Função para verificar se é admin
